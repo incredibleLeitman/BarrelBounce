@@ -8,12 +8,16 @@
 
 config_version=5
 
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
 [application]
 
 config/name="BarrelBounce"
 config/description="One button. One ball. Many barrels."
 run/main_scene="res://scenes/main_menu.tscn"
-config/features=PackedStringArray("4.3", "GL Compatibility")
+config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [autoload]
@@ -27,15 +31,6 @@ window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=4
-
-[input_devices]
-
-pointing/emulate_touch_from_mouse=false
-pointing/emulate_mouse_from_touch=true
-
-[physics]
-
-common/physics_ticks_per_second=60
 
 [rendering]
 
