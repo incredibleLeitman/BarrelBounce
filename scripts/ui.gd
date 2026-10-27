@@ -145,18 +145,18 @@ static func spin(min_v: float, max_v: float, step: float, value: float, suffix: 
 
 ## Full-screen UI root with the game theme applied.
 static func layer() -> CanvasLayer:
-	var layer := CanvasLayer.new()
+	var canvas := CanvasLayer.new()
 	var root := Control.new()
 	root.name = "Root"
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.theme = theme()
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(root)
-	return layer
+	canvas.add_child(root)
+	return canvas
 
 
-static func root_of(layer: CanvasLayer) -> Control:
-	return layer.get_node("Root") as Control
+static func root_of(canvas: CanvasLayer) -> Control:
+	return canvas.get_node("Root") as Control
 
 
 ## Transient message at the bottom of the screen.
