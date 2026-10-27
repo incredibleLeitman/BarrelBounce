@@ -1,0 +1,12 @@
+# Godot
+.godot/
+*.import
+export/
+*.tmp
+# Local export credentials
+export_presets.cfg.secret
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
