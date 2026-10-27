@@ -102,6 +102,27 @@ godot --headless res://tools/smoke_test.tscn         # play a level, round-trip 
 xvfb-run godot --path . res://tools/screenshots.tscn # PNG of every scene into user://screenshots/
 ```
 
+## Testing on an Android phone
+
+`export_presets.cfg` ships an **Android** preset (debug APK, arm64 + armv7, landscape,
+immersive). One-time setup on your PC, all in the Godot editor:
+
+1. *Editor → Manage Export Templates…* → Download and install the 4.3 templates.
+2. Install [Android Studio](https://developer.android.com/studio) (or just the command-line
+   SDK) and a JDK 17. In the SDK Manager install *Android SDK Platform 34*,
+   *Build-Tools 34.0.0*, *Command-line Tools* and *NDK 23.2.8568313*.
+3. *Editor → Editor Settings → Export → Android*: set *Java SDK Path* and *Android SDK
+   Path* (for example `C:\Users\<you>\AppData\Local\Android\Sdk`). Godot 4.3 creates the
+   debug keystore by itself, so the keystore fields can stay empty.
+4. Enable *USB debugging* on the phone (Developer options) and plug it in.
+
+Then *Project → Export… → Android → Export Project* writes `export/BarrelBounce.apk`, or
+use the **one-click deploy** button (Android icon in the editor's top-right toolbar) to
+install and start it on the connected phone directly. `export/` is git-ignored.
+
+To publish later, change `package/unique_name` in the preset to your own reverse-domain
+id, switch to a release keystore and bump `version/code`.
+
 ## Ideas for later
 
 Barrel types: sticky (holds the ball until a second tap, lets you wait out a pattern),
