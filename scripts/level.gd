@@ -12,6 +12,8 @@ var rev: String                 # revision hash the times of this session belong
 var taps: Array = []            # ticks the button was pressed on in the current attempt
 var ghost: Simulation           # replay of the best run, stepped in lockstep with sim
 var ghost_taps: Dictionary = {}
+var ghost_first_tap := 0        # absolute tick of the best run's first launch
+var ghost_armed := false        # true once the player fired and the ghost race is on
 var pending_fire := false
 var death_timer := 0.0
 var finished := false
@@ -164,9 +166,12 @@ func _load_ghost() -> void:
 		ghost = null
 		view.bind_ghost(null)
 		return
+	ghost_first_tap = 1 << 30
 	for t in entry["taps"]:
 		ghost_taps[int(t)] = true
+		ghost_first_tap = mini(ghost_first_tap, int(t))
 	ghost = Simulation.new(level.duplicate(true))
+	ghost_armed = false
 	view.bind_ghost(ghost)
 
 
@@ -187,7 +192,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			camera.pan_by(event.relative)
 	elif event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE:
-			_on_back()
+			_restart()   # leaving is the Exit button's job; Escape restarts the attempt
 			return
 		_fire()
 	elif event is InputEventJoypadButton and event.pressed:
@@ -214,10 +219,18 @@ func _physics_process(delta: float) -> void:
 		return
 	if pending_fire:
 		taps.append(sim.tick + 1)
+	var first_launch := pending_fire and sim.mode == Simulation.Mode.IN_CANNON and sim.run_start_tick < 0
 	sim.step(pending_fire)
 	pending_fire = false
 	if ghost:
-		ghost.step(ghost_taps.has(ghost.tick + 1))
+		# The ghost races on the run clock: it waits in the start cannon until the player's
+		# first launch, then plays its own run from its first launch onwards.
+		if first_launch and not ghost_armed:
+			ghost_armed = true
+			while ghost.tick < ghost_first_tap - 1:
+				ghost.step(false)
+		if ghost_armed:
+			ghost.step(ghost_taps.has(ghost.tick + 1))
 	for e in sim.events:
 		match e:
 			"launch":
@@ -256,6 +269,7 @@ func _reset_run() -> void:
 	taps.clear()
 	if ghost:
 		ghost.reset()
+		ghost_armed = false
 		view.ghost_node.clear_trail()
 	view.player_node.clear_trail()
 	view.refresh()

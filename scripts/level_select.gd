@@ -127,13 +127,14 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 		meta += "level changed: best time reset"
 	else:
 		meta += "not finished yet"
-	if GameState.is_verified(level) and str(level["verified"].get("player", "")) != GameState.player_name():
-		meta += "  ·  %s: %s" % [str(level["verified"]["player"]), Simulation.format_ticks(int(level["verified"]["ticks"]))]
+	var proof := GameState.proof_for(level)
+	if not proof.is_empty() and str(proof.get("player", "")) != GameState.player_name():
+		meta += "  ·  %s: %s" % [str(proof["player"]), Simulation.format_ticks(int(proof["ticks"]))]
 	info.add_child(UI.label(meta, 16, UI.MUTED))
 
 	if editable:
 		var share := UI.small_button("  Share  ")
-		if GameState.is_verified(level):
+		if GameState.can_share(level):
 			share.pressed.connect(func(): _show_share(level))
 		else:
 			share.disabled = true
@@ -165,7 +166,7 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 func _show_share(level: Dictionary) -> void:
 	var root := UI.root_of(ui)
 	var body := UI.dialog(root, "Share “%s”" % str(level.get("name", "")), 640)
-	body.add_child(UI.label("Send this code to a friend. They paste it under “Import code”. It carries your %s run as proof the level can be finished." % Simulation.format_ticks(int(level["verified"]["ticks"])), 16, UI.MUTED, true))
+	body.add_child(UI.label("Send this code to a friend. They paste it under “Import code”. It carries a %s run as proof the level can be finished." % Simulation.format_ticks(int(GameState.proof_for(level)["ticks"])), 16, UI.MUTED, true))
 	var code := GameState.level_to_code(level)
 	var box := TextEdit.new()
 	box.text = code

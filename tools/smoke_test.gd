@@ -61,6 +61,7 @@ func _test_play_with_taps() -> void:
 	check(GameState.best_ticks(level["id"], rev) == sim.finish_ticks, "best time was recorded for this revision")
 	check(GameState.best_entry(level["id"], rev)["taps"] == taps, "the winning taps were recorded with the time: %s" % str(taps))
 	check(scene.ghost != null and scene.view.ghost_node.visible, "ghost is loaded after a best time")
+	check(GameState.can_share(level), "a finished level is shareable without re-saving it")
 	check(scene.win_panel.visible, "win panel is shown")
 	check(scene.next_button.visible, "next level button offered for a built-in level")
 	# Replay determinism: a second run with the same taps must give the identical result.
@@ -78,6 +79,21 @@ func _test_play_with_taps() -> void:
 	check(scene.camera.zoom.x == 1.0, "cannot zoom closer than the default view")
 	scene.camera.zoom_by(0.01, Vector2(640, 360))
 	check(is_equal_approx(scene.camera.zoom.x, CameraRig.ZOOM_MIN), "zoom out stops at the minimum")
+	# Ghost race: the ghost only starts with the player's first launch and finishes in its own time.
+	scene._restart()
+	for i in 120:
+		scene._physics_process(1.0 / 60.0)
+	check(scene.ghost.tick == 0 and not scene.ghost_armed, "ghost waits while the player waits")
+	scene.pending_fire = true
+	scene._physics_process(1.0 / 60.0)
+	check(scene.ghost_armed and scene.ghost.mode != Simulation.Mode.IN_CANNON, "ghost launches together with the player")
+	var ghost_done := false
+	for i in 150:
+		if scene.ghost.mode == Simulation.Mode.FINISHED:
+			ghost_done = scene.ghost.finish_ticks == GameState.best_ticks(level["id"], rev)
+			break
+		scene._physics_process(1.0 / 60.0)
+	check(ghost_done, "ghost finishes in the best time")
 	scene.queue_free()
 	await get_tree().process_frame
 
@@ -169,6 +185,22 @@ func _test_editor_roundtrip() -> void:
 	check(c1["behaviors"][editor.path_edit]["points"] == [[300.0, -100.0]], "dragging a point moves it")
 	editor._set_selection([1])
 	check(editor.path_edit == -1, "changing the selection leaves path mode")
+	# In select mode a press on a selected cannon drags the group instead of deselecting it.
+	editor._set_selection([0, 1])
+	editor.select_mode = true
+	var sp: Vector2 = editor.sim.cannon_states[1]["pos"]
+	var sx0: float = float(c0["x"])
+	editor._press(sp)
+	check(editor.selection.size() == 2, "select mode press keeps the selection")
+	editor._drag_to(sp + Vector2(50, 0))
+	editor._release(sp + Vector2(50, 0))
+	check(editor.selection.size() == 2 and float(c0["x"]) == sx0 + 50.0, "select mode drag moves the group")
+	sp = editor.sim.cannon_states[1]["pos"]
+	editor._press(sp)
+	editor._release(sp)
+	check(editor.selection.size() == 1 and editor.primary() == 0, "select mode click without moving deselects that cannon")
+	editor.select_mode = false
+	editor._set_selection([1])
 	c1["behaviors"].pop_back()
 	editor._structure_changed()
 	# Wheel over the inspector must not zoom.

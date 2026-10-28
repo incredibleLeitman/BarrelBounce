@@ -210,6 +210,23 @@ func is_verified(level: Dictionary) -> bool:
 	return typeof(v) == TYPE_DICTIONARY and str(v.get("rev", "")) == level_hash(level)
 
 
+## The proof run for the level's current revision: the one stored in the level, or the
+## player's own best of this revision (a finish from the level select never re-saves the
+## file, so the live score counts too). {} when there is none.
+func proof_for(level: Dictionary) -> Dictionary:
+	if is_verified(level):
+		return level["verified"]
+	var rev := level_hash(level)
+	var best := best_entry(str(level.get("id", "")), rev)
+	if best.is_empty():
+		return {}
+	return {"rev": rev, "ticks": best["ticks"], "taps": best.get("taps", []), "player": best.get("player", player_name())}
+
+
+func can_share(level: Dictionary) -> bool:
+	return not proof_for(level).is_empty()
+
+
 func save_user_level(level: Dictionary) -> bool:
 	level["modified"] = Time.get_unix_time_from_system()
 	# Attach the author's best run of this exact revision as the proof the level can be done.
@@ -244,6 +261,12 @@ func level_to_code(level: Dictionary) -> String:
 	var payload := level.duplicate(true)
 	payload.erase("modified")
 	payload.erase("id")
+	# The code always carries the best available proof run for this revision.
+	var proof := proof_for(level)
+	if proof.is_empty():
+		payload.erase("verified")
+	else:
+		payload["verified"] = proof
 	var raw := JSON.stringify(payload).to_utf8_buffer()
 	return CODE_PREFIX + Marshalls.raw_to_base64(raw.compress(FileAccess.COMPRESSION_DEFLATE))
 

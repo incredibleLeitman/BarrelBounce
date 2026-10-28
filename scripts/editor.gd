@@ -33,6 +33,8 @@ var drag_start := Vector2.ZERO   # level point where the press happened
 var drag_moved := false
 var drag_positions: Dictionary = {}   # cannon index -> base position when a group drag started
 var pressed_cannon := -1         # cannon under the press, for the release-collapses-selection rule
+var press_modifier := false      # select mode / Ctrl was active at the press
+var press_was_selected := false  # the pressed cannon was already selected before the press
 var panning := false             # dragging empty space (or the middle mouse button) moves the camera
 var previewing := false
 var select_mode := false         # touch-friendly stand-in for holding Ctrl
@@ -852,10 +854,15 @@ func _press(p: Vector2) -> void:
 	var hit := _hit_cannon(p)
 	if hit >= 0:
 		pressed_cannon = hit
+		press_modifier = modifier
+		press_was_selected = selection.has(hit) and not finish_selected
 		if modifier:
-			_toggle_in_selection(hit)
-			return
-		if not selection.has(hit) or finish_selected:
+			# Select mode: an unselected cannon joins the selection right away; an already
+			# selected one leaves it only on a click without movement (see _release), so a
+			# press can always start a drag of the group.
+			if not press_was_selected:
+				_toggle_in_selection(hit)
+		elif not press_was_selected:
 			_set_selection([hit])
 		# Group drag: remember where every selected cannon started.
 		dragging = true
@@ -897,9 +904,13 @@ func _release(p: Vector2) -> void:
 				picked.append(i)
 		view.set_band(Rect2())
 		_set_selection(picked)
-	elif drag_mode == Drag.MOVE and pressed_cannon >= 0 and not drag_moved and not _modifier_held() and selection.size() > 1:
-		# A plain click on one of several selected cannons, without moving: select just that one.
-		_set_selection([pressed_cannon])
+	elif drag_mode == Drag.MOVE and pressed_cannon >= 0 and not drag_moved:
+		if press_modifier and press_was_selected:
+			# Click (no drag) on a selected cannon in select mode: remove it from the selection.
+			_toggle_in_selection(pressed_cannon)
+		elif not press_modifier and selection.size() > 1:
+			# A plain click on one of several selected cannons, without moving: select just that one.
+			_set_selection([pressed_cannon])
 	dragging = false
 	panning = false
 	drag_mode = Drag.NONE
