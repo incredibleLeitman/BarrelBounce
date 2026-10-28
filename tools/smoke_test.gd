@@ -15,6 +15,7 @@ func _ready() -> void:
 	_test_level_codes()
 	_test_paths_and_size()
 	_test_sequences()
+	_test_ghost_and_fairness()
 	print("SMOKE TEST " + ("PASSED" if failures == 0 else "FAILED (%d)" % failures))
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -40,6 +41,7 @@ func _test_play_with_taps() -> void:
 	print("level scene: play 'Catch Me' with taps at ticks 1 and 28")
 	var level: Dictionary = GameState.builtin_levels()[1]
 	GameState.scores.erase(level["id"])
+	GameState.scores.erase(level["id"] + "_ghost")
 	GameState.current_level = level
 	var scene := await _swap_scene(GameState.SCENE_LEVEL)
 	var sim: Simulation = scene.sim
@@ -55,7 +57,10 @@ func _test_play_with_taps() -> void:
 		scene._physics_process(1.0 / 60.0)
 	check(sim.mode == Simulation.Mode.FINISHED, "ball reached the finish gate")
 	check(sim.finish_ticks > 0 and sim.finish_ticks < 120, "finish time looks sane: %s" % Simulation.format_ticks(sim.finish_ticks))
-	check(GameState.best_ticks(level["id"]) == sim.finish_ticks, "best time was recorded")
+	var rev: String = GameState.level_hash(level)
+	check(GameState.best_ticks(level["id"], rev) == sim.finish_ticks, "best time was recorded for this revision")
+	check(GameState.best_entry(level["id"], rev)["taps"] == taps, "the winning taps were recorded with the time: %s" % str(taps))
+	check(scene.ghost != null and scene.view.ghost_node.visible, "ghost is loaded after a best time")
 	check(scene.win_panel.visible, "win panel is shown")
 	check(scene.next_button.visible, "next level button offered for a built-in level")
 	# Replay determinism: a second run with the same taps must give the identical result.
@@ -232,6 +237,10 @@ func _test_level_select_lists_saved_level() -> void:
 func _test_level_codes() -> void:
 	print("level codes: round trip and validation")
 	var level: Dictionary = GameState.builtin_levels()[6]
+	# Shared codes must carry a proof run; attach the solver's known solution of Hot Heads.
+	var proof_ticks := GameState.verify_run(level, [19, 58, 80])
+	check(proof_ticks > 0, "solver taps finish Hot Heads in %s" % Simulation.format_ticks(proof_ticks))
+	level["verified"] = {"rev": GameState.level_hash(level), "ticks": proof_ticks, "taps": [19, 58, 80], "player": "Solver"}
 	var code := GameState.level_to_code(level)
 	check(code.begins_with("BB1:") and code.length() < 900, "code is compact: %d chars" % code.length())
 	var back := GameState.level_from_code(code + "\n")
@@ -309,3 +318,42 @@ func _test_sequences() -> void:
 	check(is_equal_approx(e3.x, 500.0) and is_equal_approx(e3.y, 300.0), "and step 1 backwards to the base")
 	check(Simulation.active_step(pp, 150) == 1 and Simulation.active_step(pp, 210) == 0, "active step follows the reverse pass")
 	check(Simulation.cannon_cycle_ticks(pp) == 240, "pingpong cycle is twice the sequence")
+
+
+
+func _test_ghost_and_fairness() -> void:
+	print("ghost replay, revisions, shareable only when verified")
+	var level: Dictionary = GameState.builtin_levels()[1]
+	var rev := GameState.level_hash(level)
+	# The recorded taps replay to the recorded time: that is what the ghost does and what a
+	# leaderboard server would check.
+	var entry := GameState.best_entry(level["id"], rev)
+	check(not entry.is_empty() and GameState.verify_run(level, entry["taps"]) == int(entry["ticks"]), "verify_run reproduces the best time from its taps")
+	check(GameState.verify_run(level, [1]) == -1, "a run that falls off does not verify")
+	# Editing the level changes its revision and hides the old best.
+	var edited: Dictionary = level.duplicate(true)
+	edited["cannons"][1]["angle"] = -35.0
+	var rev2 := GameState.level_hash(edited)
+	check(rev2 != rev, "gameplay edits change the revision hash")
+	check(GameState.best_ticks(level["id"], rev2) == -1 and GameState.best_is_stale(level["id"], rev2), "the old best does not count for the edited level and is reported as stale")
+	edited["name"] = "Renamed"
+	edited["background"] = "cave"
+	check(GameState.level_hash(edited) == rev2, "name and background do not change the revision")
+	# A user level is shareable only after a verified run of its current revision.
+	var mine := GameState.new_level()
+	mine["name"] = "Smoke Share"
+	GameState.save_user_level(mine)
+	check(not GameState.is_verified(mine), "a fresh level is not verified")
+	check(GameState.level_from_code(GameState.level_to_code(mine)).is_empty(), "a code without proof is rejected on import")
+	var solved_ticks := GameState.verify_run(mine, [1])
+	check(solved_ticks > 0, "the default new level is finished by one tap at tick 1")
+	GameState.record_time(mine["id"], GameState.level_hash(mine), solved_ticks, [1])
+	GameState.save_user_level(mine)
+	check(GameState.is_verified(mine), "saving after a finish attaches the proof")
+	var imported := GameState.level_from_code(GameState.level_to_code(mine))
+	check(not imported.is_empty() and imported["verified"]["ticks"] == solved_ticks, "a code with a valid proof imports")
+	var tampered: Dictionary = mine.duplicate(true)
+	tampered["verified"]["ticks"] = 1
+	check(GameState.level_from_code(GameState.level_to_code(tampered)).is_empty(), "a code whose proof time was tampered with is rejected")
+	GameState.delete_user_level(mine["id"])
+	GameState.scores.erase(mine["id"])

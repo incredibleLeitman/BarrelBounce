@@ -8,6 +8,10 @@ const DEATH_PAUSE := 0.7
 var sim: Simulation
 var view: LevelView
 var level: Dictionary
+var rev: String                 # revision hash the times of this session belong to
+var taps: Array = []            # ticks the button was pressed on in the current attempt
+var ghost: Simulation           # replay of the best run, stepped in lockstep with sim
+var ghost_taps: Dictionary = {}
 var pending_fire := false
 var death_timer := 0.0
 var finished := false
@@ -30,10 +34,12 @@ func _ready() -> void:
 	level = GameState.current_level
 	if level.is_empty():
 		level = GameState.builtin_levels()[0]
+	rev = GameState.level_hash(level)
 	sim = Simulation.new(level)
 	view = LevelView.new()
 	add_child(view)
 	view.bind(sim)
+	_load_ghost()
 	camera = CameraRig.new()
 	add_child(camera)
 	_fit_camera()
@@ -140,8 +146,28 @@ func _build_ui() -> void:
 
 
 func _update_best() -> void:
-	var best := GameState.best_ticks(str(level.get("id", "")))
-	best_label.text = "best " + Simulation.format_ticks(best) if best >= 0 else "no time yet"
+	var id := str(level.get("id", ""))
+	var best := GameState.best_ticks(id, rev)
+	if best >= 0:
+		best_label.text = "best " + Simulation.format_ticks(best) + "  ·  ghost on"
+	elif GameState.best_is_stale(id, rev):
+		best_label.text = "level changed: best time reset"
+	else:
+		best_label.text = "no time yet"
+
+
+## The ghost replays the taps of the best run for this revision, from tick 0.
+func _load_ghost() -> void:
+	var entry := GameState.best_entry(str(level.get("id", "")), rev)
+	ghost_taps.clear()
+	if entry.is_empty() or entry.get("taps", []).is_empty():
+		ghost = null
+		view.bind_ghost(null)
+		return
+	for t in entry["taps"]:
+		ghost_taps[int(t)] = true
+	ghost = Simulation.new(level.duplicate(true))
+	view.bind_ghost(ghost)
 
 
 # ---------------------------------------------------------------- input
@@ -186,8 +212,12 @@ func _physics_process(delta: float) -> void:
 		if death_timer <= 0.0:
 			_reset_run()
 		return
+	if pending_fire:
+		taps.append(sim.tick + 1)
 	sim.step(pending_fire)
 	pending_fire = false
+	if ghost:
+		ghost.step(ghost_taps.has(ghost.tick + 1))
 	for e in sim.events:
 		match e:
 			"launch":
@@ -223,6 +253,10 @@ func _on_die() -> void:
 
 func _reset_run() -> void:
 	sim.reset()
+	taps.clear()
+	if ghost:
+		ghost.reset()
+		view.ghost_node.clear_trail()
 	view.player_node.clear_trail()
 	view.refresh()
 
@@ -239,9 +273,11 @@ func _on_finish() -> void:
 	Sfx.play(self, Sfx.chime(), -4.0)
 	var ticks := sim.finish_ticks
 	var id := str(level.get("id", ""))
-	var new_best := GameState.record_time(id, ticks)
+	var new_best := GameState.record_time(id, rev, ticks, taps)
 	win_time.text = Simulation.format_ticks(ticks)
-	win_best.text = "New best time!" if new_best else "best " + Simulation.format_ticks(GameState.best_ticks(id))
+	win_best.text = "New best time! Your ghost will race you next time." if new_best else "best " + Simulation.format_ticks(GameState.best_ticks(id, rev))
+	if new_best:
+		_load_ghost()
 	_update_best()
 	var idx := GameState.builtin_index(id)
 	next_button.visible = idx >= 0 and idx + 1 < BuiltinLevels.LEVELS.size()

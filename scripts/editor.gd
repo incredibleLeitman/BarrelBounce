@@ -1041,7 +1041,14 @@ func _save() -> void:
 	if GameState.save_user_level(level):
 		dirty = false
 		save_button.text = "  Save  "
-		UI.toast(UI.root_of(ui), "Saved “%s”" % str(level.get("name", "")), UI.GOOD)
+		var id := str(level["id"])
+		var rev := GameState.level_hash(level)
+		if GameState.best_is_stale(id, rev):
+			UI.toast(UI.root_of(ui), "Saved “%s”. The level changed, so its best time was reset. Finish it to share it." % str(level.get("name", "")), UI.ACCENT)
+		elif not GameState.is_verified(level):
+			UI.toast(UI.root_of(ui), "Saved “%s”. Finish it once (Test) to make it shareable." % str(level.get("name", "")), UI.GOOD)
+		else:
+			UI.toast(UI.root_of(ui), "Saved “%s”" % str(level.get("name", "")), UI.GOOD)
 	else:
 		UI.toast(UI.root_of(ui), "Could not save level", UI.BAD)
 

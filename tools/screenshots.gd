@@ -14,7 +14,7 @@ const SHOTS := [
 func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute("user://screenshots")
 	await get_tree().process_frame
-	GameState.current_level = GameState.builtin_levels()[9]
+	GameState.current_level = GameState.builtin_levels()[1]
 	# Editor shot: several cannons of the same type with movement, close together, one selected.
 	GameState.editor_level = GameState.normalize_level({
 		"name": "Pattern colours", "background": "underwater",

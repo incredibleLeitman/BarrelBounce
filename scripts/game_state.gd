@@ -116,8 +116,8 @@ func new_level() -> Dictionary:
 		"format": 1,
 		"name": "My Level",
 		"author": player_name(),
-		"cannons": [{"x": 160.0, "y": 560.0, "angle": -45.0, "type": "normal", "behaviors": []}],
-		"finish": {"x": 1000.0, "y": 160.0, "w": 60.0, "h": 420.0},
+		"cannons": [{"x": 160.0, "y": 560.0, "angle": -40.0, "type": "normal", "behaviors": []}],
+		"finish": {"x": 700.0, "y": 300.0, "w": 60.0, "h": 360.0},
 		"start": 0,
 		"background": "space",
 	})
@@ -173,8 +173,52 @@ func _load_profile() -> void:
 		profile["color"] = PLAYER_COLORS[randi() % PLAYER_COLORS.size()]
 
 
+## Hash of everything that affects play (not the name, author or background). A best time
+## belongs to one revision: edit the level and the old times no longer count.
+func level_hash(level: Dictionary) -> String:
+	var core := {
+		"cannons": level.get("cannons", []), "finish": level.get("finish", {}),
+		"start": level.get("start", 0), "width": level.get("width", Simulation.BASE_SIZE.x),
+		"height": level.get("height", Simulation.BASE_SIZE.y),
+	}
+	# Round-trip through JSON first so ints and floats (0 vs 0.0) hash the same whether the
+	# level came from code, from a file or from a code string.
+	var canonical = JSON.parse_string(JSON.stringify(core))
+	return JSON.stringify(canonical).md5_text().substr(0, 16)
+
+
+## Replays [param taps] (absolute ticks) on a copy of the level. Returns the finish time in
+## ticks, or -1 when the run does not finish. This is the proof check used for shared levels
+## and the basis for server-side leaderboard verification.
+func verify_run(level: Dictionary, taps: Array, max_ticks: int = 36000) -> int:
+	var sim := Simulation.new(normalize_level(level.duplicate(true)))
+	var tap_set := {}
+	for t in taps:
+		tap_set[int(t)] = true
+	while sim.tick < max_ticks:
+		sim.step(tap_set.has(sim.tick + 1))
+		if sim.mode == Simulation.Mode.FINISHED:
+			return sim.finish_ticks
+		if sim.mode == Simulation.Mode.DEAD:
+			return -1
+	return -1
+
+
+## True when the level carries a proof run that matches its current revision.
+func is_verified(level: Dictionary) -> bool:
+	var v = level.get("verified")
+	return typeof(v) == TYPE_DICTIONARY and str(v.get("rev", "")) == level_hash(level)
+
+
 func save_user_level(level: Dictionary) -> bool:
 	level["modified"] = Time.get_unix_time_from_system()
+	# Attach the author's best run of this exact revision as the proof the level can be done.
+	var rev := level_hash(level)
+	var best := best_entry(str(level["id"]), rev)
+	if best.is_empty():
+		level.erase("verified")
+	else:
+		level["verified"] = {"rev": rev, "ticks": best["ticks"], "taps": best.get("taps", []), "player": best.get("player", player_name())}
 	var f := FileAccess.open(USER_DIR + str(level["id"]) + ".json", FileAccess.WRITE)
 	if f == null:
 		push_error("Could not save level: " + str(FileAccess.get_open_error()))
@@ -227,21 +271,51 @@ func level_from_code(code: String) -> Dictionary:
 	if typeof(data.get("finish")) != TYPE_DICTIONARY:
 		return {}
 	data["id"] = new_level_id()
-	return normalize_level(data)
+	var level := normalize_level(data)
+	# A shared level must carry a proof run that really finishes this revision.
+	var v = level.get("verified")
+	if typeof(v) != TYPE_DICTIONARY or typeof(v.get("taps")) != TYPE_ARRAY:
+		return {}
+	if str(v.get("rev", "")) != level_hash(level):
+		return {}
+	var ticks := verify_run(level, v["taps"])
+	if ticks < 0 or ticks != int(v.get("ticks", -2)):
+		return {}
+	return level
 
 
 # ---------------------------------------------------------------- scores
+#
+# scores[level_id] = {"rev": revision hash, "ticks": int, "taps": [ticks...], "player": name}
+# The taps are the whole run: they drive the ghost and prove the time.
 
-func best_ticks(level_id: String) -> int:
-	return int(scores.get(level_id, -1))
+## Best entry for a level revision, or {} when there is none for that revision.
+func best_entry(level_id: String, rev: String) -> Dictionary:
+	var e = scores.get(level_id)
+	if typeof(e) != TYPE_DICTIONARY:
+		return {}
+	if str(e.get("rev", "")) != rev:
+		return {}
+	return e
 
 
-## Returns true when this is a new best time.
-func record_time(level_id: String, ticks: int) -> bool:
-	var best := best_ticks(level_id)
+func best_ticks(level_id: String, rev: String) -> int:
+	var e := best_entry(level_id, rev)
+	return int(e["ticks"]) if not e.is_empty() else -1
+
+
+## True when a best exists for the level but for another revision (the level was edited).
+func best_is_stale(level_id: String, rev: String) -> bool:
+	var e = scores.get(level_id)
+	return typeof(e) == TYPE_DICTIONARY and str(e.get("rev", "")) != rev
+
+
+## Returns true when this is a new best time for the given revision.
+func record_time(level_id: String, rev: String, ticks: int, taps: Array = []) -> bool:
+	var best := best_ticks(level_id, rev)
 	if best >= 0 and ticks >= best:
 		return false
-	scores[level_id] = ticks
+	scores[level_id] = {"rev": rev, "ticks": ticks, "taps": taps.duplicate(), "player": player_name()}
 	_save_scores()
 	return true
 
@@ -251,8 +325,13 @@ func _load_scores() -> void:
 	if f == null:
 		return
 	var data = JSON.parse_string(f.get_as_text())
-	if typeof(data) == TYPE_DICTIONARY:
-		scores = data
+	if typeof(data) != TYPE_DICTIONARY:
+		return
+	# Entries from before revisions were plain tick counts; they carry no proof and no
+	# revision, so they are dropped rather than trusted.
+	for key in data.keys():
+		if typeof(data[key]) == TYPE_DICTIONARY:
+			scores[key] = data[key]
 
 
 func _save_scores() -> void:

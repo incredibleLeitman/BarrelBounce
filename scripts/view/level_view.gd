@@ -4,8 +4,11 @@ extends Node2D
 ## Keeps the 1280x720 play area centred in whatever window / phone aspect we get.
 
 var sim: Simulation
+## Optional second simulation replaying the best run, drawn as a translucent ghost.
+var ghost_sim: Simulation
 var cannon_nodes: Array = []
 var player_node: PlayerNode
+var ghost_node: PlayerNode
 var finish_node: FinishNode
 var backdrop: Backdrop
 var show_hints := false
@@ -19,6 +22,11 @@ func _ready() -> void:
 	add_child(backdrop)
 	finish_node = FinishNode.new()
 	add_child(finish_node)
+	ghost_node = PlayerNode.new()
+	ghost_node.ghost = true
+	ghost_node.z_index = 2
+	ghost_node.visible = false
+	add_child(ghost_node)
 	player_node = PlayerNode.new()
 	player_node.z_index = 2   # above every cannon, selected ones included
 	add_child(player_node)
@@ -88,6 +96,14 @@ func refresh() -> void:
 		cannon_nodes[i].apply_state(sim.cannon_states[i], occupied, sim.fuse_left(i))
 	finish_node.set_rect(sim.finish_rect())
 	player_node.update_from(sim)
+	if ghost_sim:
+		ghost_node.update_from(ghost_sim)
+
+
+func bind_ghost(s: Simulation) -> void:
+	ghost_sim = s
+	ghost_node.visible = s != null
+	ghost_node.clear_trail()
 	var bg := str(sim.level.get("background", "space"))
 	if bg != backdrop.theme_name:
 		backdrop.theme_name = bg

@@ -7,6 +7,8 @@ const TRAIL_LEN := 40
 const DEAD_COLOR := Color("#e5484d")
 
 var body_color := Color("#ffd166")
+## A ghost is the translucent replay of the best run: no face, no puffs, a faint trail.
+var ghost := false
 var trail: PackedVector2Array = PackedVector2Array()
 var facing := 0.0
 var in_cannon := true
@@ -66,6 +68,9 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
+	if ghost:
+		_draw_ghost()
+		return
 	# Trail (in local space: subtract our own position).
 	for i in range(1, trail.size()):
 		var a := float(i) / trail.size()
@@ -107,3 +112,14 @@ func _draw() -> void:
 		draw_circle(Vector2(5, 4), 3.2, Color.WHITE)
 		draw_circle(Vector2(6, 4), 1.6, Color("#1b2138"))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func _draw_ghost() -> void:
+	if dead:
+		return
+	for i in range(1, trail.size()):
+		var a := float(i) / trail.size()
+		draw_line(trail[i - 1] - position, trail[i] - position, Color(1, 1, 1, a * 0.18), 2.0)
+	draw_circle(Vector2.ZERO, 15.0, Color(1, 1, 1, 0.16))
+	draw_arc(Vector2.ZERO, 15.0, 0.0, TAU, 24, Color(1, 1, 1, 0.55), 2.0)
+	draw_circle(Vector2(-4, -5), 4.0, Color(1, 1, 1, 0.15))

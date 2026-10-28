@@ -117,14 +117,27 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 	info.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(info)
 	info.add_child(UI.label(str(level.get("name", "Untitled")), 26))
-	var best := GameState.best_ticks(str(level.get("id", "")))
+	var id := str(level.get("id", ""))
+	var rev := GameState.level_hash(level)
+	var best := GameState.best_ticks(id, rev)
 	var meta := "by %s  ·  %d cannons  ·  " % [str(level.get("author", "?")), level.get("cannons", []).size()]
-	meta += ("best " + Simulation.format_ticks(best)) if best >= 0 else "not finished yet"
+	if best >= 0:
+		meta += "best " + Simulation.format_ticks(best)
+	elif GameState.best_is_stale(id, rev):
+		meta += "level changed: best time reset"
+	else:
+		meta += "not finished yet"
+	if GameState.is_verified(level) and str(level["verified"].get("player", "")) != GameState.player_name():
+		meta += "  ·  %s: %s" % [str(level["verified"]["player"]), Simulation.format_ticks(int(level["verified"]["ticks"]))]
 	info.add_child(UI.label(meta, 16, UI.MUTED))
 
 	if editable:
 		var share := UI.small_button("  Share  ")
-		share.pressed.connect(func(): _show_share(level))
+		if GameState.is_verified(level):
+			share.pressed.connect(func(): _show_share(level))
+		else:
+			share.disabled = true
+			share.tooltip_text = "Finish this version of the level once, then you can share it."
 		row.add_child(share)
 		var del := UI.icon_button("", "trash")
 		del.pressed.connect(func():
@@ -152,7 +165,7 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 func _show_share(level: Dictionary) -> void:
 	var root := UI.root_of(ui)
 	var body := UI.dialog(root, "Share “%s”" % str(level.get("name", "")), 640)
-	body.add_child(UI.label("Send this code to a friend. They paste it under “Import code”.", 16, UI.MUTED))
+	body.add_child(UI.label("Send this code to a friend. They paste it under “Import code”. It carries your %s run as proof the level can be finished." % Simulation.format_ticks(int(level["verified"]["ticks"])), 16, UI.MUTED, true))
 	var code := GameState.level_to_code(level)
 	var box := TextEdit.new()
 	box.text = code
@@ -198,7 +211,7 @@ func _show_import() -> void:
 	do_import.pressed.connect(func():
 		var level := GameState.level_from_code(box.text)
 		if level.is_empty():
-			status.text = "That is not a valid level code."
+			status.text = "That is not a valid level code, or its proof run does not finish the level."
 			return
 		if GameState.save_user_level(level):
 			# Close the dialog (its shade is the dialog's top-most ancestor under the UI root).

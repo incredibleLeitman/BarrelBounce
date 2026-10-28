@@ -105,6 +105,17 @@ Saved levels are JSON in `user://levels/<id>.json` (on Windows:
 `background` is one of `space`, `underwater`, `meadow`, `sunset`, `cave` (all drawn
 procedurally in `scripts/view/backdrop.gd`; pick one under *Settings* in the editor).
 
+### Best times, ghosts and fair sharing
+
+A best time is stored per **level revision**: a hash of the cannons, gate, size and start
+cannon (`GameState.level_hash`). Edit a level and its old best no longer counts; the level
+select and the editor say "level changed: best time reset". The record also keeps the
+**taps** of the run, which drive the **ghost**, a translucent replay of your best run that
+races you from tick 0 of every attempt, and serve as **proof**: a level can only be shared
+after you finished its current revision, the code carries that run, and importing replays
+it and rejects codes whose proof does not finish. The same replay check is what a server
+leaderboard would do.
+
 ### Player profile
 
 *Player* on the main menu lets you pick a ball colour and roll a random name. It is stored
