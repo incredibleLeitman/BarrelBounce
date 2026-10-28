@@ -20,7 +20,10 @@ var dragging := false
 var drag_mode: int = Drag.NONE
 var drag_offset := Vector2.ZERO
 var drag_anchor := Rect2()  # gate rect when a resize drag started
+var panning := false        # dragging empty space (or the middle mouse button) moves the camera
 var previewing := false
+var camera: CameraRig
+var grid_button: Button
 
 var ui: CanvasLayer
 var name_edit: LineEdit
@@ -43,8 +46,20 @@ func _ready() -> void:
 	view.fit_inset = Rect2(12, 66, 372, 12)   # keep clear of the top bar and the inspector
 	add_child(view)
 	view.bind(sim)
+	camera = CameraRig.new()
+	add_child(camera)
+	_update_camera_limits()
+	get_viewport().size_changed.connect(_update_camera_limits)
 	_build_ui()
 	_select_cannon(0)
+
+
+func _update_camera_limits() -> void:
+	# The view is scaled to fit beside the inspector, so the world bounds scale with it.
+	var world := Rect2(view.position + Simulation.WORLD.position * view.scale.x, Simulation.WORLD.size * view.scale.x)
+	# Merge with the viewport so the default view stays put when the scaled world is smaller than the screen.
+	camera.limit_rect = Rect2(Vector2.ZERO, get_viewport_rect().size).merge(world)
+	camera.clamp_position()
 
 
 # ---------------------------------------------------------------- UI
@@ -86,6 +101,16 @@ func _build_ui() -> void:
 	var help := UI.icon_button("", "help")
 	help.pressed.connect(func(): HelpDialog.show(root))
 	top.add_child(help)
+
+	grid_button = UI.small_button("  Grid  ")
+	grid_button.toggle_mode = true
+	grid_button.button_pressed = true
+	grid_button.toggled.connect(func(on):
+		view.backdrop.show_grid = on
+		view.backdrop.queue_redraw())
+	top.add_child(grid_button)
+	view.backdrop.show_grid = true
+	view.backdrop.queue_redraw()
 
 	top.add_child(UI.hspacer_expand())
 
@@ -393,18 +418,30 @@ func _add_cannon() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if camera.handle_zoom_input(event):
+		return
 	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_MIDDLE or event.button_index == MOUSE_BUTTON_RIGHT:
+			panning = event.pressed
+			return
 		if event.button_index != MOUSE_BUTTON_LEFT:
 			return
 		if event.pressed:
 			_pick(view.world_mouse())
+			# Pressing empty space grabs the camera instead of an object.
+			panning = not dragging
 		else:
 			dragging = false
+			panning = false
 			drag_mode = Drag.NONE
 			_update_cursor(view.world_mouse())
 	elif event is InputEventMouseMotion:
+		if camera.pinching():
+			return
 		if dragging:
 			_drag_to(view.world_mouse())
+		elif panning:
+			camera.pan_by(event.relative)
 		else:
 			_update_cursor(view.world_mouse())
 	elif event is InputEventKey and event.pressed and not event.echo:

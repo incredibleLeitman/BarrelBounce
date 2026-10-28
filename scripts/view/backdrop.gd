@@ -16,6 +16,8 @@ var theme_name := "space":
 		theme_name = v if THEMES.has(v) else "space"
 		queue_redraw()
 var show_bounds := false
+## Editor alignment grid: faint 10 px lines (the snap step) with stronger lines every 50 px.
+var show_grid := false
 var t := 0.0
 
 
@@ -33,6 +35,8 @@ func _draw() -> void:
 		"sunset": _draw_sunset()
 		"cave": _draw_cave()
 		_: _draw_space()
+	if show_grid:
+		_draw_grid()
 	# Play area outline, visible in every theme.
 	draw_rect(Rect2(Vector2.ZERO, Simulation.BASE_SIZE), Color(1, 1, 1, 0.08), false, 2.0)
 	if show_bounds:
@@ -162,6 +166,21 @@ func _draw_cave() -> void:
 		draw_colored_polygon(PackedVector2Array([p + Vector2(-5, 6), p + Vector2(5, 6), p + Vector2(0, -10)]), Color(c, 0.8))
 	draw_rect(Rect2(-4000, Simulation.BASE_SIZE.y, 8000, 4000), Color("#120e17"))
 	draw_rect(Rect2(-4000, Simulation.BASE_SIZE.y, 8000, 6), Color("#4a3a55"))
+
+
+func _draw_grid() -> void:
+	var size := Simulation.BASE_SIZE
+	var minor := Color(1, 1, 1, 0.09)
+	var major := Color(1, 1, 1, 0.26)
+	# Width -1 is a hairline: always one screen pixel, whatever the zoom or editor scale.
+	var x := 0.0
+	while x <= size.x:
+		draw_line(Vector2(x, 0), Vector2(x, size.y), major if fmod(x, 50.0) == 0.0 else minor, -1.0)
+		x += 10.0
+	var y := 0.0
+	while y <= size.y:
+		draw_line(Vector2(0, y), Vector2(size.x, y), major if fmod(y, 50.0) == 0.0 else minor, -1.0)
+		y += 10.0
 
 
 func _draw_dashed_rect(r: Rect2, color: Color) -> void:

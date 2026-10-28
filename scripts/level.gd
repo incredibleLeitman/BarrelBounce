@@ -4,10 +4,6 @@ extends Node2D
 ## The camera can zoom out (mouse wheel or pinch) and be dragged around while a button is held.
 
 const DEATH_PAUSE := 0.7
-const ZOOM_MIN := 0.4        # furthest out
-const ZOOM_MAX := 1.0        # the default view; zooming in closer than that is not allowed
-const ZOOM_STEP := 1.12
-const DRAG_THRESHOLD := 10.0
 
 var sim: Simulation
 var view: LevelView
@@ -16,11 +12,8 @@ var pending_fire := false
 var death_timer := 0.0
 var finished := false
 
-var camera: Camera2D
+var camera: CameraRig
 var dragging := false
-var drag_last := Vector2.ZERO
-var touches: Dictionary = {}       # finger index -> screen position (for pinch)
-var pinch_last_dist := 0.0
 
 var ui: CanvasLayer
 var time_label: Label
@@ -41,17 +34,10 @@ func _ready() -> void:
 	view = LevelView.new()
 	add_child(view)
 	view.bind(sim)
-	camera = Camera2D.new()
+	camera = CameraRig.new()
+	camera.limit_rect = Rect2(Vector2.ZERO, get_viewport_rect().size).merge(Rect2(view.position + Simulation.WORLD.position, Simulation.WORLD.size))
 	add_child(camera)
-	_reset_camera()
-	get_viewport().size_changed.connect(_reset_camera)
 	_build_ui()
-
-
-func _reset_camera() -> void:
-	camera.zoom = Vector2.ONE
-	camera.position = get_viewport_rect().size * 0.5
-	_clamp_camera()
 
 
 func _build_ui() -> void:
@@ -149,43 +135,17 @@ func _update_best() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Camera controls work in every state, firing only while playing.
+	if camera.handle_zoom_input(event):
+		return
 	if event is InputEventMouseButton:
-		match event.button_index:
-			MOUSE_BUTTON_WHEEL_UP:
-				_zoom_by(ZOOM_STEP, event.position)
-				return
-			MOUSE_BUTTON_WHEEL_DOWN:
-				_zoom_by(1.0 / ZOOM_STEP, event.position)
-				return
 		if event.pressed:
 			dragging = true
-			drag_last = event.position
 			_fire()
 		else:
 			dragging = false
 	elif event is InputEventMouseMotion:
-		if dragging and touches.size() < 2:
-			camera.position -= event.relative / camera.zoom.x
-			_clamp_camera()
-	elif event is InputEventScreenTouch:
-		# Track every finger for pinch-to-zoom. The first finger also arrives as mouse events.
-		if event.pressed:
-			touches[event.index] = event.position
-		else:
-			touches.erase(event.index)
-		if touches.size() == 2:
-			pinch_last_dist = _pinch_distance()
-	elif event is InputEventScreenDrag:
-		if touches.has(event.index):
-			touches[event.index] = event.position
-		if touches.size() == 2:
-			var d := _pinch_distance()
-			if pinch_last_dist > 0.0:
-				_zoom_by(d / pinch_last_dist, _pinch_center())
-			pinch_last_dist = d
-	elif event is InputEventMagnifyGesture:
-		if touches.size() < 2:
-			_zoom_by(event.factor, event.position)
+		if dragging and not camera.pinching():
+			camera.pan_by(event.relative)
 	elif event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE:
 			_on_back()
@@ -200,39 +160,6 @@ func _fire() -> void:
 		return
 	pending_fire = true
 	get_viewport().set_input_as_handled()
-
-
-func _pinch_distance() -> float:
-	var pts := touches.values()
-	return (pts[0] as Vector2).distance_to(pts[1] as Vector2)
-
-
-func _pinch_center() -> Vector2:
-	var pts := touches.values()
-	return ((pts[0] as Vector2) + (pts[1] as Vector2)) * 0.5
-
-
-## Zooms around a screen point so what is under the finger / cursor stays put.
-func _zoom_by(factor: float, screen_point: Vector2) -> void:
-	var old_zoom := camera.zoom.x
-	var new_zoom := clampf(old_zoom * factor, ZOOM_MIN, ZOOM_MAX)
-	if is_equal_approx(new_zoom, old_zoom):
-		return
-	var vp_center := get_viewport_rect().size * 0.5
-	var world_before := camera.position + (screen_point - vp_center) / old_zoom
-	camera.zoom = Vector2(new_zoom, new_zoom)
-	camera.position = world_before - (screen_point - vp_center) / new_zoom
-	_clamp_camera()
-
-
-## Keeps the play area in view: never pan further than the world bounds.
-func _clamp_camera() -> void:
-	var half := get_viewport_rect().size * 0.5 / camera.zoom.x
-	var world := Rect2(view.position + Simulation.WORLD.position, Simulation.WORLD.size)
-	var lo := world.position + half
-	var hi := world.end - half
-	camera.position.x = clampf(camera.position.x, minf(lo.x, hi.x), maxf(lo.x, hi.x))
-	camera.position.y = clampf(camera.position.y, minf(lo.y, hi.y), maxf(lo.y, hi.y))
 
 
 # ---------------------------------------------------------------- simulation

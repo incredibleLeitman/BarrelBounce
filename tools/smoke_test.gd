@@ -67,10 +67,10 @@ func _test_play_with_taps() -> void:
 	scene._restart()
 	check(sim.tick == 0 and sim.elapsed_ticks() == 0, "restart resets tick and timer to 0")
 	# Camera: zooming in beyond the default is refused, zooming out is clamped to the minimum.
-	scene._zoom_by(2.0, Vector2(640, 360))
+	scene.camera.zoom_by(2.0, Vector2(640, 360))
 	check(scene.camera.zoom.x == 1.0, "cannot zoom closer than the default view")
-	scene._zoom_by(0.01, Vector2(640, 360))
-	check(is_equal_approx(scene.camera.zoom.x, scene.ZOOM_MIN), "zoom out stops at the minimum")
+	scene.camera.zoom_by(0.01, Vector2(640, 360))
+	check(is_equal_approx(scene.camera.zoom.x, CameraRig.ZOOM_MIN), "zoom out stops at the minimum")
 	scene.queue_free()
 	await get_tree().process_frame
 
@@ -119,6 +119,17 @@ func _test_editor_roundtrip() -> void:
 	check(editor.finish_selected, "picking the gate selects it")
 	editor._drag_to(fr.get_center() + Vector2(-100, 0))
 	check(float(editor.level["finish"]["x"]) == fr.position.x - 100.0, "gate dragged")
+	# Camera and grid in the editor.
+	editor.camera.zoom_by(0.5, Vector2(400, 300))
+	check(is_equal_approx(editor.camera.zoom.x, 0.5), "editor zooms out")
+	var before: Vector2 = editor.camera.position
+	editor.camera.pan_by(Vector2(-200, 0))
+	check(editor.camera.position.x > before.x, "editor pans")
+	editor.camera.zoom_by(10.0, Vector2(400, 300))
+	check(editor.camera.zoom.x == 1.0, "editor zoom stops at the default view")
+	check(editor.view.backdrop.show_grid, "grid is on by default in the editor")
+	editor.grid_button.button_pressed = false
+	check(not editor.view.backdrop.show_grid, "grid button hides the grid")
 	editor._save()
 	var saved := GameState.user_levels()
 	var found := false
