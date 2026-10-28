@@ -73,6 +73,14 @@ tap. The editor locks the type of the start cannon and loading a level enforces 
 | `orbit` | `radius` px, `period` s, `clockwise` | circle around the base position |
 | `path` | `points` [[dx,dy],…] relative to the base, `period` s, `smooth`, `closed` | follows the points at constant speed: a Catmull-Rom curve or straight lines, looping around or ping-ponging back |
 
+Every behaviour is either **together** (`"seq": false`, the default: it runs all the time and
+its offset is added to the others) or a **step** (`"seq": true` with a `duration` in
+seconds). Steps run one after another in list order, each starting from the position and
+angle the previous step ended at, and the sequence loops. Continuous behaviours keep running
+underneath. In the editor the icon on each movement block flips it between the two; steps are
+numbered and show their duration, blocks that run together share a bracket, and *Preview*
+highlights the step that is playing.
+
 ### Level format
 
 Saved levels are JSON in `user://levels/<id>.json` (on Windows:

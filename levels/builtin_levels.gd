@@ -90,4 +90,17 @@ const LEVELS := [
 		"finish": {"x": 100.0, "y": 40.0, "w": 120.0, "h": 90.0},
 		"start": 0,
 	},
+	{
+		"format": 1, "id": "builtin_09", "name": "Two-Step", "author": "BarrelBounce",
+		"cannons": [
+			{"x": 160.0, "y": 600.0, "angle": -45.0, "type": "normal", "behaviors": []},
+			{"x": 620.0, "y": 520.0, "angle": -40.0, "type": "normal", "behaviors": [
+				{"type": "move", "dir": "up", "range": 220.0, "period": 2.0, "seq": true, "duration": 1.0},
+				{"type": "move", "dir": "right", "range": 220.0, "period": 2.0, "seq": true, "duration": 1.0},
+				{"type": "move", "dir": "down", "range": 220.0, "period": 2.0, "seq": true, "duration": 1.0},
+				{"type": "move", "dir": "left", "range": 220.0, "period": 2.0, "seq": true, "duration": 1.0}]},
+		],
+		"finish": {"x": 1150.0, "y": 100.0, "w": 60.0, "h": 500.0},
+		"start": 0,
+	},
 ]

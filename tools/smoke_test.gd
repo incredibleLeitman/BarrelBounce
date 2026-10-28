@@ -14,6 +14,7 @@ func _ready() -> void:
 	await _test_level_select_lists_saved_level()
 	_test_level_codes()
 	_test_paths_and_size()
+	_test_sequences()
 	print("SMOKE TEST " + ("PASSED" if failures == 0 else "FAILED (%d)" % failures))
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -272,3 +273,26 @@ func _test_paths_and_size() -> void:
 	check(sim.mode == Simulation.Mode.FLYING, "a point inside the bigger level is alive")
 	var tiny := GameState.normalize_level({"width": 100, "cannons": [{"x": 10, "y": 10, "angle": 0}]})
 	check(Simulation.level_size(tiny).x == Simulation.MIN_SIZE.x, "sizes are clamped to the minimum")
+
+
+func _test_sequences() -> void:
+	print("sequential movement")
+	# Move left for 1 s, then move right for 1 s: ends back at the base, never cancels out.
+	var c := {"x": 500.0, "y": 300.0, "angle": 0.0, "behaviors": [
+		{"type": "move", "dir": "left", "range": 150.0, "period": 2.0, "seq": true, "duration": 1.0},
+		{"type": "move", "dir": "right", "range": 150.0, "period": 2.0, "seq": true, "duration": 1.0},
+	]}
+	var p_half: Vector2 = Simulation.cannon_state_at(c, 60)["pos"]
+	var p_mid: Vector2 = Simulation.cannon_state_at(c, 90)["pos"]
+	var p_end: Vector2 = Simulation.cannon_state_at(c, 120)["pos"]
+	check(is_equal_approx(p_half.x, 350.0), "after step 1 the cannon is 150 px left")
+	check(p_mid.x > 350.0 and p_mid.x < 500.0, "step 2 starts where step 1 ended and moves right")
+	check(is_equal_approx(p_end.x, 500.0), "the sequence loops back to the base")
+	check(Simulation.active_step(c, 30) == 0 and Simulation.active_step(c, 90) == 1, "active step is reported")
+	var starts := Simulation.behavior_start_offsets(c)
+	check(starts[0]["pos"] == Vector2.ZERO and is_equal_approx(starts[1]["pos"].x, -150.0), "hint start offsets follow the chain")
+	# A continuous behaviour on top keeps running during the sequence.
+	c["behaviors"].append({"type": "rotate", "speed": 90.0})
+	check(is_equal_approx(float(Simulation.cannon_state_at(c, 60)["angle"]), 90.0), "together behaviours are summed on top of the steps")
+	check(Simulation.cannon_cycle_ticks(c) == 240, "cycle covers the sequence and the rotation")
+	check(Simulation.default_duration({"type": "move", "period": 3.0}) == 1.5, "move steps default to one way")

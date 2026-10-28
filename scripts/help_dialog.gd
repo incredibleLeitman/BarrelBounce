@@ -33,6 +33,12 @@ static func show(parent: Control) -> void:
 
 	body.add_child(UI.spacer(6))
 	body.add_child(UI.label("Movement (combine as many as you like)", 24))
+	var seq_text := UI.label("Each movement block is either \"together\" (runs all the time, added to the others) or a numbered \"step\". " +
+		"Steps play one after another for their duration, each starting where the previous one ended, and the whole sequence loops. " +
+		"\"Move left, then move right\" as two steps goes there and back instead of cancelling out.", 15, UI.MUTED)
+	seq_text.autowrap_mode = TextServer.AUTOWRAP_WORD
+	seq_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_child(seq_text)
 	for key in Simulation.BEHAVIOR_ORDER:
 		_row(body, UI.ACCENT_2, Simulation.BEHAVIORS[key]["label"], BEHAVIOR_HELP[key])
 

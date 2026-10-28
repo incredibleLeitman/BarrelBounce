@@ -121,10 +121,25 @@ func hint_color() -> Color:
 
 
 func _draw_hints() -> void:
-	var base := Vector2(float(data.get("x", 0.0)), float(data.get("y", 0.0))) - position
+	var origin := Vector2(float(data.get("x", 0.0)), float(data.get("y", 0.0))) - position
 	var hint := hint_color()
 	var w := 3.0 if selected else 2.0
-	for b in data.get("behaviors", []):
+	var starts := Simulation.behavior_start_offsets(data)
+	var behaviors: Array = data.get("behaviors", [])
+	var step_no := 0
+	for bi in behaviors.size():
+		var b: Dictionary = behaviors[bi]
+		# Steps start where the previous step ended; continuous behaviours start at the base.
+		var base: Vector2 = origin + starts[bi]["pos"]
+		var angle_base: float = float(data.get("angle", 0.0)) + float(starts[bi]["angle"])
+		var is_step := bool(b.get("seq", false))
+		if is_step:
+			step_no += 1
+			if selected:
+				# Small numbered marker at the start of each step.
+				draw_circle(base, 9.0, Color("#1b2138"))
+				draw_circle(base, 7.0, hint)
+				draw_string(ThemeDB.fallback_font, base + Vector2(-4, 4), str(step_no), HORIZONTAL_ALIGNMENT_CENTER, -1, 11, Color("#1b2138"))
 		match str(b.get("type", "")):
 			"move":
 				var d: Vector2 = Simulation.DIRS.get(str(b.get("dir", "right")), Vector2.RIGHT)
@@ -135,8 +150,8 @@ func _draw_hints() -> void:
 				draw_arc(base, float(b.get("radius", 120.0)), 0.0, TAU, 48, hint, w)
 				draw_circle(base, 4.0, hint)
 			"sweep":
-				var a0 := deg_to_rad(float(data.get("angle", 0.0)) + float(b.get("from", -45.0)))
-				var a1 := deg_to_rad(float(data.get("angle", 0.0)) + float(b.get("to", 45.0)))
+				var a0 := deg_to_rad(angle_base + float(b.get("from", -45.0)))
+				var a1 := deg_to_rad(angle_base + float(b.get("to", 45.0)))
 				draw_arc(Vector2.ZERO, 62.0, minf(a0, a1), maxf(a0, a1), 24, hint, w + 1.0)
 			"rotate":
 				draw_arc(Vector2.ZERO, 62.0, 0.0, TAU, 48, Color(hint, hint.a * 0.6), w - 0.5)

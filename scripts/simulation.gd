@@ -134,38 +134,130 @@ func cannon_type(index: int) -> Dictionary:
 
 
 ## Position and angle of a cannon at tick [param t]. Pure function: same input, same output.
+##
+## Behaviours marked "seq" are steps of a timeline: they run one after another, each for its
+## "duration", the offset reached at the end of a step carries into the next, and the timeline
+## loops. Behaviours without "seq" run continuously for the whole time and are summed on top.
 static func cannon_state_at(c: Dictionary, t: int) -> Dictionary:
 	var time := t * DT
 	var p := Vector2(float(c.get("x", 0.0)), float(c.get("y", 0.0)))
 	var ang := float(c.get("angle", 0.0))
+	var steps: Array = []
 	for b in c.get("behaviors", []):
-		match str(b.get("type", "")):
-			"rotate":
-				ang += float(b.get("speed", 90.0)) * time
-			"sweep":
-				var period: float = maxf(0.1, float(b.get("period", 2.0)))
-				var k := 0.5 - 0.5 * cos(TAU * time / period)
-				ang += lerpf(float(b.get("from", -45.0)), float(b.get("to", 45.0)), k)
-			"move":
-				var d: Vector2 = DIRS.get(str(b.get("dir", "right")), Vector2.RIGHT)
-				var period: float = maxf(0.1, float(b.get("period", 2.0)))
-				var k := 0.5 - 0.5 * cos(TAU * time / period)
-				p += d * float(b.get("range", 150.0)) * k
-			"orbit":
-				var period: float = maxf(0.1, float(b.get("period", 3.0)))
-				var th := TAU * time / period
-				if not bool(b.get("clockwise", true)):
-					th = -th
-				p += Vector2(cos(th), sin(th)) * float(b.get("radius", 120.0))
-			"path":
-				var period: float = maxf(0.1, float(b.get("period", 4.0)))
-				var closed := bool(b.get("closed", true))
-				var u := fmod(time / period, 1.0)
-				if not closed:
-					# Ping-pong along an open path.
-					u = 1.0 - absf(2.0 * u - 1.0)
-				p += point_along(path_polyline(b), closed, u)
+		if bool(b.get("seq", false)):
+			steps.append(b)
+		else:
+			var off := behavior_offset(b, time)
+			p += off["pos"]
+			ang += off["angle"]
+	if not steps.is_empty():
+		var total := 0.0
+		for b in steps:
+			total += step_duration(b)
+		if total > 0.0:
+			var local := fmod(time, total)
+			for b in steps:
+				var dur := step_duration(b)
+				var off: Dictionary
+				if local >= dur:
+					off = behavior_offset(b, dur)   # finished: carry its end offset
+					local -= dur
+				else:
+					off = behavior_offset(b, local)  # the active step
+					local = -1.0
+				p += off["pos"]
+				ang += off["angle"]
+				if local < 0.0:
+					break
 	return {"pos": p, "angle": ang}
+
+
+## Offset one behaviour contributes after running for [param time] seconds.
+static func behavior_offset(b: Dictionary, time: float) -> Dictionary:
+	var p := Vector2.ZERO
+	var ang := 0.0
+	match str(b.get("type", "")):
+		"rotate":
+			ang = float(b.get("speed", 90.0)) * time
+		"sweep":
+			var period: float = maxf(0.1, float(b.get("period", 2.0)))
+			var k := 0.5 - 0.5 * cos(TAU * time / period)
+			ang = lerpf(float(b.get("from", -45.0)), float(b.get("to", 45.0)), k)
+		"move":
+			var d: Vector2 = DIRS.get(str(b.get("dir", "right")), Vector2.RIGHT)
+			var period: float = maxf(0.1, float(b.get("period", 2.0)))
+			var k := 0.5 - 0.5 * cos(TAU * time / period)
+			p = d * float(b.get("range", 150.0)) * k
+		"orbit":
+			var period: float = maxf(0.1, float(b.get("period", 3.0)))
+			var th := TAU * time / period
+			if not bool(b.get("clockwise", true)):
+				th = -th
+			p = Vector2(cos(th), sin(th)) * float(b.get("radius", 120.0))
+		"path":
+			var period: float = maxf(0.1, float(b.get("period", 4.0)))
+			var closed := bool(b.get("closed", true))
+			var u := fmod(time / period, 1.0)
+			if not closed:
+				# Ping-pong along an open path.
+				u = 1.0 - absf(2.0 * u - 1.0)
+			p = point_along(path_polyline(b), closed, u)
+	return {"pos": p, "angle": ang}
+
+
+## How long a sequential step plays, in seconds.
+static func step_duration(b: Dictionary) -> float:
+	return maxf(0.0, float(b.get("duration", default_duration(b))))
+
+
+## Sensible step length when a behaviour is first made sequential: one way for move and
+## sweep (half their period), a full loop for orbit and path, one second for rotate.
+static func default_duration(b: Dictionary) -> float:
+	var period: float = maxf(0.1, float(b.get("period", 2.0)))
+	match str(b.get("type", "")):
+		"move", "sweep":
+			return period * 0.5
+		"orbit", "path":
+			return period
+	return 1.0
+
+
+## Per behaviour, the offset (pos, angle) a cannon has accumulated when that behaviour
+## starts: zero for continuous ones, the sum of the previous steps' end offsets for steps.
+## Used to draw movement hints where they really happen.
+static func behavior_start_offsets(c: Dictionary) -> Array:
+	var out: Array = []
+	var acc_p := Vector2.ZERO
+	var acc_a := 0.0
+	for b in c.get("behaviors", []):
+		if bool(b.get("seq", false)):
+			out.append({"pos": acc_p, "angle": acc_a})
+			var off := behavior_offset(b, step_duration(b))
+			acc_p += off["pos"]
+			acc_a += off["angle"]
+		else:
+			out.append({"pos": Vector2.ZERO, "angle": 0.0})
+	return out
+
+
+## Index (into the cannon's behaviours) of the step playing at tick [param t], or -1.
+static func active_step(c: Dictionary, t: int) -> int:
+	var total := 0.0
+	var bs: Array = c.get("behaviors", [])
+	for b in bs:
+		if bool(b.get("seq", false)):
+			total += step_duration(b)
+	if total <= 0.0:
+		return -1
+	var local := fmod(t * DT, total)
+	for i in bs.size():
+		if not bool(bs[i].get("seq", false)):
+			continue
+		var dur := step_duration(bs[i])
+		if local < dur:
+			return i
+		local -= dur
+	return -1
 
 
 ## The points a path behaviour visits, relative to the cannon base, starting at the base.
@@ -232,7 +324,11 @@ static func point_along(pts: PackedVector2Array, closed: bool, u: float) -> Vect
 ## Length in ticks after which a cannon's motion repeats (0 = static).
 static func cannon_cycle_ticks(c: Dictionary) -> int:
 	var cycle := 0.0
+	var seq_total := 0.0
 	for b in c.get("behaviors", []):
+		if bool(b.get("seq", false)):
+			seq_total += step_duration(b)
+			continue
 		var period := 0.0
 		match str(b.get("type", "")):
 			"rotate":
@@ -241,6 +337,7 @@ static func cannon_cycle_ticks(c: Dictionary) -> int:
 			"sweep", "move", "orbit", "path":
 				period = maxf(0.1, float(b.get("period", 2.0)))
 		cycle = maxf(cycle, period)
+	cycle = maxf(cycle, seq_total)
 	return int(ceil(cycle * TICK_RATE))
 
 

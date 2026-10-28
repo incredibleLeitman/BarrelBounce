@@ -37,6 +37,8 @@ var panning := false             # dragging empty space (or the middle mouse but
 var previewing := false
 var select_mode := false         # touch-friendly stand-in for holding Ctrl
 var path_edit := -1              # behaviour index of the primary cannon whose path is being edited
+var behavior_panels: Array = []  # [panel, idle stylebox, active stylebox] per behaviour row
+var last_active_step := -1
 var handle_index := -1           # control point being dragged in path edit mode
 var camera: CameraRig
 var grid_button: Button
@@ -184,6 +186,8 @@ func _build_ui() -> void:
 
 
 func _clear_inspector() -> void:
+	behavior_panels.clear()
+	last_active_step = -1
 	for c in inspector_box.get_children():
 		c.queue_free()
 
@@ -407,23 +411,64 @@ func _build_cannon_inspector() -> void:
 
 
 ## One behaviour row; edits write to the same slot of every selected cannon.
+## Blocks that run together get a shared bracket on the left; steps get a number, a duration
+## and the sequence icon. The icon button flips a block between the two.
 func _build_behavior_row(cannons: Array, bi: int) -> void:
 	var b: Dictionary = cannons[0]["behaviors"][bi]
 	var kind := str(b.get("type", "rotate"))
 	var spec: Dictionary = Simulation.BEHAVIORS.get(kind, Simulation.BEHAVIORS["rotate"])
+	var is_step := bool(b.get("seq", false))
 	var set_all := func(key: String, v):
 		for c in cannons:
 			c["behaviors"][bi][key] = v
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", UI.flat(UI.BG_DEEP, 12, 8))
+	var idle := UI.flat(UI.BG_DEEP, 12, 8)
+	if not is_step:
+		# Bracket joining the blocks that run together.
+		idle.border_width_left = 5
+		idle.border_color = Color(UI.ACCENT_2, 0.6)
+		idle.corner_radius_top_left = 2
+		idle.corner_radius_bottom_left = 2
+	var active := UI.flat(UI.BG_DEEP.lightened(0.08), 12, 8, UI.ACCENT)
+	panel.add_theme_stylebox_override("panel", idle)
 	inspector_box.add_child(panel)
+	behavior_panels.append([panel, idle, active])
 	var box := VBoxContainer.new()
 	panel.add_child(box)
 	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 6)
 	box.add_child(head)
+	var mode := UI.icon_button("", "seq" if is_step else "par", 36, 14)
+	mode.tooltip_text = "Step %d of the sequence: click to run it together with the others" % _step_number(cannons[0], bi) if is_step else "Runs together with the other blocks: click to make it a step in a sequence"
+	mode.pressed.connect(func():
+		for c in cannons:
+			var blk: Dictionary = c["behaviors"][bi]
+			blk["seq"] = not is_step
+			if not is_step and not blk.has("duration"):
+				blk["duration"] = Simulation.default_duration(blk)
+		_structure_changed())
+	head.add_child(mode)
+	if is_step:
+		var badge := UI.label(str(_step_number(cannons[0], bi)), 14, Color("#1b2138"))
+		badge.add_theme_stylebox_override("normal", UI.flat(UI.ACCENT_2, 10, 2))
+		badge.custom_minimum_size = Vector2(24, 24)
+		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		head.add_child(badge)
 	head.add_child(UI.label(spec["label"], 18, UI.ACCENT_2))
 	head.add_child(UI.hspacer_expand())
-	var rm := UI.small_button(" x ")
+	var up := UI.button("^", 32, 14)
+	up.custom_minimum_size.x = 32
+	up.disabled = bi == 0
+	up.pressed.connect(func(): _move_behavior(cannons, bi, -1))
+	head.add_child(up)
+	var down := UI.button("v", 32, 14)
+	down.custom_minimum_size.x = 32
+	down.disabled = bi >= cannons[0]["behaviors"].size() - 1
+	down.pressed.connect(func(): _move_behavior(cannons, bi, 1))
+	head.add_child(down)
+	var rm := UI.button("x", 32, 14)
+	rm.custom_minimum_size.x = 32
 	rm.pressed.connect(func():
 		for c in cannons:
 			c["behaviors"].remove_at(bi)
@@ -435,6 +480,13 @@ func _build_behavior_row(cannons: Array, bi: int) -> void:
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 4)
 	box.add_child(grid)
+	if is_step:
+		grid.add_child(UI.label("Duration s", 15, UI.MUTED))
+		var dur := UI.spin(0.1, 60.0, 0.1, Simulation.step_duration(b))
+		dur.value_changed.connect(func(v):
+			set_all.call("duration", v)
+			_structure_changed())
+		grid.add_child(dur)
 	for p in spec["params"]:
 		grid.add_child(UI.label(p[1], 15, UI.MUTED))
 		var s := UI.spin(p[2], p[3], p[4], float(b.get(p[0], p[5])))
@@ -468,6 +520,41 @@ func _build_behavior_row(cannons: Array, bi: int) -> void:
 		grid.add_child(cb)
 	if kind == "path":
 		_build_path_tools(box, cannons, bi)
+
+
+## 1-based position of behaviour [param bi] among the cannon's steps.
+func _step_number(c: Dictionary, bi: int) -> int:
+	var n := 0
+	for i in bi + 1:
+		if bool(c["behaviors"][i].get("seq", false)):
+			n += 1
+	return n
+
+
+func _move_behavior(cannons: Array, bi: int, delta: int) -> void:
+	for c in cannons:
+		var bs: Array = c["behaviors"]
+		var j := bi + delta
+		if j < 0 or j >= bs.size():
+			return
+		var tmp = bs[bi]
+		bs[bi] = bs[j]
+		bs[j] = tmp
+	_structure_changed()
+
+
+## Preview: highlight the step that is playing on the primary cannon.
+func _update_active_step() -> void:
+	var idx := -1
+	if previewing and primary() >= 0 and selection.size() == 1:
+		idx = Simulation.active_step(level["cannons"][primary()], sim.tick)
+	if idx == last_active_step:
+		return
+	last_active_step = idx
+	for i in behavior_panels.size():
+		var entry: Array = behavior_panels[i]
+		if is_instance_valid(entry[0]):
+			entry[0].add_theme_stylebox_override("panel", entry[2] if i == idx else entry[1])
 
 
 ## Point editing for a path behaviour (single selection only).
@@ -922,6 +1009,7 @@ func _physics_process(_delta: float) -> void:
 	if previewing:
 		sim.set_tick(sim.tick + 1)
 		view.refresh()
+	_update_active_step()
 	tick_label.text = "t = %.2f s" % (sim.tick / float(Simulation.TICK_RATE))
 
 
