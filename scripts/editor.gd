@@ -56,7 +56,7 @@ func _build_ui() -> void:
 	top.add_theme_constant_override("separation", 8)
 	root.add_child(top)
 
-	var back := UI.small_button("  ◀  ")
+	var back := UI.small_button("  < Back  ")
 	back.pressed.connect(_on_back)
 	top.add_child(back)
 
@@ -78,11 +78,11 @@ func _build_ui() -> void:
 	tick_label = UI.label("t = 0.00 s", 16, UI.MUTED)
 	tick_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top.add_child(tick_label)
-	preview_button = UI.small_button("  ▶ Preview  ")
+	preview_button = UI.small_button("  Preview  ")
 	preview_button.pressed.connect(_toggle_preview)
 	top.add_child(preview_button)
 
-	var test := UI.small_button("  Test ▶  ")
+	var test := UI.small_button("  Test  ")
 	test.pressed.connect(_test_play)
 	top.add_child(test)
 	save_button = UI.accent_button("  Save  ", 44, 18)
@@ -272,7 +272,7 @@ func _build_behavior_row(c: Dictionary, bi: int) -> void:
 	box.add_child(head)
 	head.add_child(UI.label(spec["label"], 18, UI.ACCENT_2))
 	head.add_child(UI.hspacer_expand())
-	var rm := UI.small_button(" ✕ ")
+	var rm := UI.small_button(" x ")
 	rm.pressed.connect(func():
 		c["behaviors"].remove_at(bi)
 		_structure_changed())
@@ -428,7 +428,7 @@ func _drag_to(p: Vector2) -> void:
 
 func _toggle_preview() -> void:
 	previewing = not previewing
-	preview_button.text = "  ■ Stop  " if previewing else "  ▶ Preview  "
+	preview_button.text = "  Stop  " if previewing else "  Preview  "
 	if not previewing:
 		sim.set_tick(0)
 		view.refresh()

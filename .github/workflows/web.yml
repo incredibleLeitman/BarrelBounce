@@ -1,0 +1,81 @@
+name: Web build
+
+# Exports the game for the browser (WebAssembly) and publishes it to GitHub Pages.
+# Enable Pages once under Settings -> Pages -> Source: "GitHub Actions".
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.7.2
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot and web export templates
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-web
+
+      - name: Download Godot and the web export templates
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          mkdir -p ~/godot ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          cd ~/godot
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -o -q godot.zip && rm godot.zip
+          curl -sSL -o templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -o -j -q templates.tpz "templates/web*" -d ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          rm templates.tpz
+
+      - name: Export for the web
+        run: |
+          set -e
+          GODOT=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
+          $GODOT --headless --import
+          mkdir -p export/web
+          $GODOT --headless --export-release Web export/web/index.html
+          ls -la export/web
+
+      - name: Smoke test and solver
+        run: |
+          set -e
+          GODOT=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
+          $GODOT --headless res://tools/smoke_test.tscn
+          $GODOT --headless -s tools/solve_levels.gd -- 60
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: export/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - id: deployment
+        uses: actions/deploy-pages@v4

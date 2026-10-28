@@ -45,7 +45,7 @@ func _build_ui() -> void:
 	top.add_theme_constant_override("separation", 12)
 	root.add_child(top)
 
-	var back := UI.small_button("  ✕  ")
+	var back := UI.small_button("  Exit  ")
 	back.pressed.connect(_on_back)
 	top.add_child(back)
 	var name_label := UI.label(str(level.get("name", "Level")), 22, UI.MUTED)
@@ -64,7 +64,7 @@ func _build_ui() -> void:
 	top.add_child(times)
 	top.add_child(UI.hspacer_expand())
 
-	var restart := UI.small_button("  ↺  ")
+	var restart := UI.small_button("  Reset  ")
 	restart.pressed.connect(_restart)
 	top.add_child(restart)
 
@@ -101,7 +101,7 @@ func _build_ui() -> void:
 	var again := UI.accent_button("Play again")
 	again.pressed.connect(_restart)
 	box.add_child(again)
-	next_button = UI.button("Next level  ▶")
+	next_button = UI.button("Next level  >")
 	next_button.pressed.connect(_next_level)
 	box.add_child(next_button)
 	var levels := UI.button("Back")

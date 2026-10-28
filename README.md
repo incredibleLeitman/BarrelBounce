@@ -123,6 +123,24 @@ install and start it on the connected phone directly. `export/` is git-ignored.
 To publish later, change `package/unique_name` in the preset to your own reverse-domain
 id, switch to a release keystore and bump `version/code`.
 
+## Playing in the browser (WebAssembly)
+
+`export_presets.cfg` also has a **Web** preset (thread support off, so it runs on plain static
+hosting without cross-origin-isolation headers). The workflow in `.github/workflows/web.yml`
+exports it with Godot 4.7.2 on every push to `main` (and `claude/**` branches), runs the smoke
+test and the level solver, and deploys the result to **GitHub Pages**:
+
+    https://incredibleleitman.github.io/BarrelBounce/
+
+One-time: in the repository go to *Settings → Pages* and set *Source* to **GitHub Actions**
+(the workflow tries to enable this itself; if it fails the first time, flip the setting and
+re-run the workflow). Open the link on your phone, it plays with touch exactly like the
+Android build.
+
+Locally: *Project → Export… → Web → Export Project*, then serve `export/web/` with any static
+server (the editor's *Remote Debug → Run in Browser* button does that for you). Opening
+`index.html` directly from disk does not work, browsers block WASM over `file://`.
+
 ## Ideas for later
 
 Barrel types: sticky (holds the ball until a second tap, lets you wait out a pattern),

@@ -37,7 +37,7 @@ func _build_ui() -> void:
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 12)
 	col.add_child(top)
-	var back := UI.small_button("  ◀ Menu  ")
+	var back := UI.small_button("  < Menu  ")
 	back.pressed.connect(func(): GameState.go(GameState.SCENE_MENU))
 	top.add_child(back)
 	top.add_child(UI.spacer(8, false))
@@ -136,6 +136,6 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 		GameState.editor_level = copy
 		GameState.go(GameState.SCENE_EDITOR))
 	row.add_child(edit)
-	var play := UI.accent_button("  Play ▶  ", 48, 20)
+	var play := UI.accent_button("  Play  ", 48, 20)
 	play.pressed.connect(func(): GameState.play_level(level))
 	row.add_child(play)
