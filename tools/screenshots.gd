@@ -20,6 +20,9 @@ func _ready() -> void:
 	for shot in SHOTS:
 		var scene: Node = (load(shot[1]) as PackedScene).instantiate()
 		get_tree().root.add_child(scene)
+		if shot[0] == "editor":
+			# Show the multi-select inspector.
+			scene._select_all()
 		if shot[0] == "level":
 			# Let the ball fly a bit so the trail shows up.
 			for i in 30:

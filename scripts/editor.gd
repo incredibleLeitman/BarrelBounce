@@ -1,29 +1,43 @@
 extends Node2D
 ## Level editor. Drag cannons and the finish gate around, tweak cannon type / angle /
 ## behaviours in the inspector, preview the deterministic motion, test play, save.
+##
+## Selection: tap a cannon to select it. Ctrl / Shift + tap (or the Select mode button on
+## touch) toggles cannons in and out of the selection, dragging on empty space in that mode
+## draws a selection rectangle. Pressing an already selected cannon never changes the
+## selection, it starts a drag of the whole group; the selection only collapses to that one
+## cannon when the button is released without having moved. The inspector shows a value when
+## every selected cannon agrees on it, leaves it empty otherwise, and applies edits to all.
 
 const GRID := 10.0
 const PICK_RADIUS := 40.0
 const EDGE_GRAB := 12.0      # distance (level px) from a gate edge that grabs it for resizing
 const MIN_GATE := 20.0
+const CLICK_SLOP := 6.0      # level px of movement that still counts as a click
 
-enum Drag { NONE, MOVE, LEFT, RIGHT, TOP, BOTTOM }
+enum Drag { NONE, MOVE, LEFT, RIGHT, TOP, BOTTOM, BAND }
 
 var level: Dictionary
 var sim: Simulation
 var view: LevelView
 var dirty := false
 
-var selected := -1          # cannon index, -1 = none
+var selection: Array[int] = []   # selected cannon indices, last clicked at the end
 var finish_selected := false
 var dragging := false
 var drag_mode: int = Drag.NONE
 var drag_offset := Vector2.ZERO
-var drag_anchor := Rect2()  # gate rect when a resize drag started
-var panning := false        # dragging empty space (or the middle mouse button) moves the camera
+var drag_anchor := Rect2()       # gate rect when a resize drag started
+var drag_start := Vector2.ZERO   # level point where the press happened
+var drag_moved := false
+var drag_positions: Dictionary = {}   # cannon index -> base position when a group drag started
+var pressed_cannon := -1         # cannon under the press, for the release-collapses-selection rule
+var panning := false             # dragging empty space (or the middle mouse button) moves the camera
 var previewing := false
+var select_mode := false         # touch-friendly stand-in for holding Ctrl
 var camera: CameraRig
 var grid_button: Button
+var select_button: Button
 
 var ui: CanvasLayer
 var name_edit: LineEdit
@@ -51,7 +65,7 @@ func _ready() -> void:
 	_update_camera_limits()
 	get_viewport().size_changed.connect(_update_camera_limits)
 	_build_ui()
-	_select_cannon(0)
+	_set_selection([0])
 
 
 func _update_camera_limits() -> void:
@@ -60,6 +74,11 @@ func _update_camera_limits() -> void:
 	# Merge with the viewport so the default view stays put when the scaled world is smaller than the screen.
 	camera.limit_rect = Rect2(Vector2.ZERO, get_viewport_rect().size).merge(world)
 	camera.clamp_position()
+
+
+## The cannon the inspector header talks about: the last one clicked.
+func primary() -> int:
+	return selection[selection.size() - 1] if not selection.is_empty() else -1
 
 
 # ---------------------------------------------------------------- UI
@@ -84,7 +103,7 @@ func _build_ui() -> void:
 	name_edit = LineEdit.new()
 	name_edit.text = str(level.get("name", "My Level"))
 	name_edit.placeholder_text = "Level name"
-	name_edit.custom_minimum_size = Vector2(220, 44)
+	name_edit.custom_minimum_size = Vector2(180, 44)
 	name_edit.text_changed.connect(func(t):
 		level["name"] = t
 		_mark_dirty())
@@ -94,7 +113,8 @@ func _build_ui() -> void:
 	add.pressed.connect(_add_cannon)
 	top.add_child(add)
 
-	var settings := UI.icon_button("Settings", "gear")
+	var settings := UI.icon_button("", "gear")
+	settings.tooltip_text = "Level settings (background)"
 	settings.pressed.connect(_show_settings)
 	top.add_child(settings)
 
@@ -111,6 +131,12 @@ func _build_ui() -> void:
 	top.add_child(grid_button)
 	view.backdrop.show_grid = true
 	view.backdrop.queue_redraw()
+
+	select_button = UI.icon_button("", "select")
+	select_button.toggle_mode = true
+	select_button.tooltip_text = "Multi-select: tap cannons to add or remove them, drag a rectangle on empty space. Same as holding Ctrl."
+	select_button.toggled.connect(func(on): select_mode = on)
+	top.add_child(select_button)
 
 	top.add_child(UI.hspacer_expand())
 
@@ -144,7 +170,7 @@ func _build_ui() -> void:
 	inspector_box.add_theme_constant_override("separation", 8)
 	scroll.add_child(inspector_box)
 
-	var hint := UI.label("Drag things to move them · drag a gate edge to resize it · tap to edit", 15, UI.MUTED)
+	var hint := UI.label("Drag to move · Ctrl+tap or Select mode for multi-select · drag a gate edge to resize it", 15, UI.MUTED)
 	hint.add_theme_stylebox_override("normal", UI.flat(Color(UI.BG_DEEP, 0.75), 10, 6))
 	hint.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	hint.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -163,8 +189,8 @@ func _rebuild_inspector() -> void:
 	_clear_inspector()
 	if finish_selected:
 		_build_finish_inspector()
-	elif selected >= 0 and selected < level["cannons"].size():
-		_build_cannon_inspector(level["cannons"][selected])
+	elif not selection.is_empty():
+		_build_cannon_inspector()
 	else:
 		inspector_box.add_child(UI.label("Nothing selected", 20, UI.MUTED))
 		inspector_box.add_child(UI.label("Tap a cannon or the finish gate.", 16, UI.MUTED))
@@ -190,21 +216,50 @@ func _build_finish_inspector() -> void:
 		grid.add_child(s)
 
 
-func _build_cannon_inspector(c: Dictionary) -> void:
+## Selected cannon dictionaries, in selection order.
+func _selected_cannons() -> Array:
+	var out: Array = []
+	for i in selection:
+		if i >= 0 and i < level["cannons"].size():
+			out.append(level["cannons"][i])
+	return out
+
+
+## The shared value of [param key] across the selection, or null when they differ.
+func _common(cannons: Array, key: String, default) -> Variant:
+	var first = cannons[0].get(key, default)
+	for c in cannons:
+		if c.get(key, default) != first:
+			return null
+	return first
+
+
+func _build_cannon_inspector() -> void:
+	var cannons := _selected_cannons()
+	var multi := cannons.size() > 1
 	var header := HBoxContainer.new()
 	inspector_box.add_child(header)
-	header.add_child(UI.title("Cannon %d" % (selected + 1), 28))
+	if multi:
+		header.add_child(UI.title("%d cannons" % cannons.size(), 28))
+	else:
+		header.add_child(UI.title("Cannon %d" % (primary() + 1), 28))
 	header.add_child(UI.hspacer_expand())
-	var is_start := selected == int(level.get("start", 0))
-	if is_start:
+	var start := int(level.get("start", 0))
+	var has_start := selection.has(start)
+	if multi:
+		if has_start:
+			header.add_child(UI.label("incl. START", 14, UI.GOOD))
+	elif primary() == start:
 		header.add_child(UI.label("START", 14, UI.GOOD))
 	else:
 		var mk := UI.small_button(" Make start ")
 		mk.pressed.connect(func():
-			level["start"] = selected
+			level["start"] = primary()
 			Simulation.enforce_start_type(level)
 			_structure_changed())
 		header.add_child(mk)
+	if multi:
+		inspector_box.add_child(UI.label("Values are shown when all selected cannons agree and left empty otherwise. Changes apply to all of them.", 13, UI.MUTED, true))
 
 	# Type (locked for the start cannon: a level must never fire without a tap)
 	var type_row := HBoxContainer.new()
@@ -214,21 +269,31 @@ func _build_cannon_inspector(c: Dictionary) -> void:
 	var type_opt := OptionButton.new()
 	type_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	type_opt.custom_minimum_size.y = 40
-	type_opt.disabled = is_start
+	type_opt.disabled = has_start and not multi
+	var common_type = _common(cannons, "type", "normal")
 	for i in Simulation.TYPE_ORDER.size():
 		var key: String = Simulation.TYPE_ORDER[i]
 		type_opt.add_item(Simulation.TYPES[key]["label"], i)
-		if key == str(c.get("type", "normal")):
-			type_opt.select(i)
-	var hint_text: String = Simulation.type_info(str(c.get("type", "normal")))["hint"]
-	if is_start:
+	if common_type == null:
+		type_opt.add_item("", 99)
+		type_opt.select(type_opt.item_count - 1)
+	else:
+		type_opt.select(Simulation.TYPE_ORDER.find(str(common_type)))
+	var hint_text := ""
+	if common_type != null:
+		hint_text = Simulation.type_info(str(common_type))["hint"]
+	if has_start:
 		hint_text = "The start cannon is always a plain cannon so the level only begins with your tap."
-	var type_hint := UI.label(hint_text, 14, UI.MUTED)
-	type_hint.autowrap_mode = TextServer.AUTOWRAP_WORD
-	type_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if multi:
+			hint_text += " It keeps its type when you change the others."
+	var type_hint := UI.label(hint_text, 14, UI.MUTED, true)
 	type_opt.item_selected.connect(func(i):
-		c["type"] = Simulation.TYPE_ORDER[i]
-		type_hint.text = Simulation.TYPES[c["type"]]["hint"]
+		if i >= Simulation.TYPE_ORDER.size():
+			return
+		for c in cannons:
+			c["type"] = Simulation.TYPE_ORDER[i]
+		Simulation.enforce_start_type(level)
+		type_hint.text = Simulation.TYPES[Simulation.TYPE_ORDER[i]]["hint"]
 		_mark_dirty()
 		view.redraw_all())
 	type_row.add_child(type_opt)
@@ -239,26 +304,43 @@ func _build_cannon_inspector(c: Dictionary) -> void:
 	ang_row.add_theme_constant_override("separation", 10)
 	inspector_box.add_child(ang_row)
 	ang_row.add_child(UI.label("Angle", 16, UI.MUTED))
+	var common_angle = _common(cannons, "angle", 0.0)
+	var apply_angle := func(v: float):
+		for c in cannons:
+			c["angle"] = v
+		_params_changed()
 	var ang := HSlider.new()
 	ang.min_value = -180
 	ang.max_value = 180
 	ang.step = 5
-	ang.value = float(c.get("angle", 0.0))
+	ang.value = float(common_angle) if common_angle != null else 0.0
 	ang.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ang.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	ang.custom_minimum_size.y = 40
 	ang_row.add_child(ang)
-	var ang_spin := UI.spin(-180, 180, 5, float(c.get("angle", 0.0)), "°")
-	ang_spin.custom_minimum_size.x = 100
-	ang_row.add_child(ang_spin)
-	ang.value_changed.connect(func(v):
-		c["angle"] = v
-		ang_spin.set_value_no_signal(v)
-		_params_changed())
-	ang_spin.value_changed.connect(func(v):
-		c["angle"] = v
-		ang.set_value_no_signal(v)
-		_params_changed())
+	if common_angle == null:
+		# Mixed: an empty field; typing a value applies it to every selected cannon.
+		var edit := LineEdit.new()
+		edit.placeholder_text = "mixed"
+		edit.custom_minimum_size = Vector2(100, 40)
+		edit.text_submitted.connect(func(t):
+			if t.is_valid_float():
+				apply_angle.call(clampf(float(t), -180.0, 180.0))
+				_rebuild_inspector())
+		ang_row.add_child(edit)
+		ang.value_changed.connect(func(v):
+			apply_angle.call(v)
+			edit.text = str(v))
+	else:
+		var ang_spin := UI.spin(-180, 180, 5, float(common_angle), "°")
+		ang_spin.custom_minimum_size.x = 100
+		ang_row.add_child(ang_spin)
+		ang.value_changed.connect(func(v):
+			ang_spin.set_value_no_signal(v)
+			apply_angle.call(v))
+		ang_spin.value_changed.connect(func(v):
+			ang.set_value_no_signal(v)
+			apply_angle.call(v))
 	inspector_box.add_child(UI.label("0° = right, -90° = up, 90° = down", 13, UI.MUTED))
 
 	# Behaviours
@@ -276,48 +358,56 @@ func _build_cannon_inspector(c: Dictionary) -> void:
 		if i == 0:
 			return
 		var kind: String = Simulation.BEHAVIOR_ORDER[i - 1]
-		var b := {"type": kind}
-		for p in Simulation.BEHAVIORS[kind]["params"]:
-			b[p[0]] = p[5]
-		if Simulation.BEHAVIORS[kind].has("dir"):
-			b["dir"] = "right"
-		if Simulation.BEHAVIORS[kind].has("clockwise"):
-			b["clockwise"] = true
-		c["behaviors"].append(b)
+		for c in cannons:
+			var b := {"type": kind}
+			for p in Simulation.BEHAVIORS[kind]["params"]:
+				b[p[0]] = p[5]
+			if Simulation.BEHAVIORS[kind].has("dir"):
+				b["dir"] = "right"
+			if Simulation.BEHAVIORS[kind].has("clockwise"):
+				b["clockwise"] = true
+			c["behaviors"].append(b)
 		_structure_changed())
 	bh.add_child(add_opt)
 
-	if c["behaviors"].is_empty():
+	# Behaviour rows are editable for the whole selection only when every cannon has the
+	# same list; otherwise the lists cannot be lined up and we offer a reset instead.
+	var same_lists := true
+	var reference := JSON.stringify(cannons[0]["behaviors"])
+	for c in cannons:
+		if JSON.stringify(c["behaviors"]) != reference:
+			same_lists = false
+			break
+	if not same_lists:
+		inspector_box.add_child(UI.label("The selected cannons move differently, so their movement is not shown. Adding a movement adds it to all of them.", 14, UI.MUTED, true))
+		var clear := UI.button("Remove all movement", 40, 16)
+		clear.pressed.connect(func():
+			for c in cannons:
+				c["behaviors"].clear()
+			_structure_changed())
+		inspector_box.add_child(clear)
+	elif cannons[0]["behaviors"].is_empty():
 		inspector_box.add_child(UI.label("Static cannon. Add movement to make it tricky.", 14, UI.MUTED))
-	for bi in c["behaviors"].size():
-		_build_behavior_row(c, bi)
+	else:
+		for bi in cannons[0]["behaviors"].size():
+			_build_behavior_row(cannons, bi)
 
 	inspector_box.add_child(UI.spacer(10))
-	var del := UI.icon_button("Delete cannon", "trash")
+	var del := UI.icon_button("Delete cannon" if not multi else "Delete %d cannons" % cannons.size(), "trash")
 	del.add_theme_color_override("font_color", UI.BAD)
-	del.disabled = level["cannons"].size() <= 1
-	del.pressed.connect(func(): _delete_cannon(selected))
+	del.disabled = level["cannons"].size() - cannons.size() < 1
+	del.pressed.connect(_delete_selection)
 	inspector_box.add_child(del)
 
 
-func _delete_cannon(index: int) -> void:
-	if index < 0 or level["cannons"].size() <= 1:
-		return
-	level["cannons"].remove_at(index)
-	var start := int(level.get("start", 0))
-	if start == index or start >= level["cannons"].size():
-		level["start"] = 0
-	elif start > index:
-		level["start"] = start - 1
-	Simulation.enforce_start_type(level)
-	selected = -1
-	_structure_changed()
-
-
-func _build_behavior_row(c: Dictionary, bi: int) -> void:
-	var b: Dictionary = c["behaviors"][bi]
+## One behaviour row; edits write to the same slot of every selected cannon.
+func _build_behavior_row(cannons: Array, bi: int) -> void:
+	var b: Dictionary = cannons[0]["behaviors"][bi]
 	var kind := str(b.get("type", "rotate"))
 	var spec: Dictionary = Simulation.BEHAVIORS.get(kind, Simulation.BEHAVIORS["rotate"])
+	var set_all := func(key: String, v):
+		for c in cannons:
+			c["behaviors"][bi][key] = v
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", UI.flat(UI.BG_DEEP, 12, 8))
 	inspector_box.add_child(panel)
@@ -329,7 +419,8 @@ func _build_behavior_row(c: Dictionary, bi: int) -> void:
 	head.add_child(UI.hspacer_expand())
 	var rm := UI.small_button(" x ")
 	rm.pressed.connect(func():
-		c["behaviors"].remove_at(bi)
+		for c in cannons:
+			c["behaviors"].remove_at(bi)
 		_structure_changed())
 	head.add_child(rm)
 
@@ -343,7 +434,7 @@ func _build_behavior_row(c: Dictionary, bi: int) -> void:
 		var s := UI.spin(p[2], p[3], p[4], float(b.get(p[0], p[5])))
 		var key: String = p[0]
 		s.value_changed.connect(func(v):
-			b[key] = v
+			set_all.call(key, v)
 			_params_changed())
 		grid.add_child(s)
 	if spec.has("dir"):
@@ -355,7 +446,7 @@ func _build_behavior_row(c: Dictionary, bi: int) -> void:
 			if Simulation.DIR_ORDER[i] == str(b.get("dir", "right")):
 				opt.select(i)
 		opt.item_selected.connect(func(i):
-			b["dir"] = Simulation.DIR_ORDER[i]
+			set_all.call("dir", Simulation.DIR_ORDER[i])
 			_params_changed())
 		grid.add_child(opt)
 	if spec.has("clockwise"):
@@ -363,7 +454,7 @@ func _build_behavior_row(c: Dictionary, bi: int) -> void:
 		var cb := CheckBox.new()
 		cb.button_pressed = bool(b.get("clockwise", true))
 		cb.toggled.connect(func(on):
-			b["clockwise"] = on
+			set_all.call("clockwise", on)
 			_params_changed())
 		grid.add_child(cb)
 
@@ -388,33 +479,67 @@ func _structure_changed() -> void:
 	sim.reset()
 	sim.set_tick(0)
 	view.rebuild()
-	if selected >= level["cannons"].size():
-		selected = -1
-	view.set_selection(selected, finish_selected)
+	var kept: Array[int] = []
+	for i in selection:
+		if i < level["cannons"].size() and not kept.has(i):
+			kept.append(i)
+	selection = kept
+	view.set_selection(selection, finish_selected)
 	_rebuild_inspector()
 
 
-func _select_cannon(i: int) -> void:
-	selected = i
-	finish_selected = false
-	view.set_selection(selected, false)
+func _set_selection(indices: Array[int], finish := false) -> void:
+	selection = indices.duplicate()
+	finish_selected = finish and indices.is_empty()
+	view.set_selection(selection, finish_selected)
 	_rebuild_inspector()
 
 
-func _select_finish() -> void:
-	selected = -1
-	finish_selected = true
-	view.set_selection(-1, true)
-	_rebuild_inspector()
+func _toggle_in_selection(i: int) -> void:
+	var s := selection.duplicate()
+	if s.has(i):
+		s.erase(i)
+	else:
+		s.append(i)
+	_set_selection(s)
+
+
+func _select_all() -> void:
+	var all: Array[int] = []
+	for i in level["cannons"].size():
+		all.append(i)
+	_set_selection(all)
 
 
 func _add_cannon() -> void:
 	var c := {"x": 640.0, "y": 400.0, "angle": -45.0, "type": "normal", "behaviors": []}
 	level["cannons"].append(c)
-	selected = level["cannons"].size() - 1
+	selection = [level["cannons"].size() - 1]
 	finish_selected = false
 	_structure_changed()
-	view.set_selection(selected, false)
+
+
+func _delete_selection() -> void:
+	var doomed := selection.duplicate()
+	doomed.sort()
+	doomed.reverse()
+	if level["cannons"].size() - doomed.size() < 1:
+		return
+	var start := int(level.get("start", 0))
+	for i in doomed:
+		level["cannons"].remove_at(i)
+		if i < start:
+			start -= 1
+		elif i == start:
+			start = 0
+	level["start"] = clampi(start, 0, level["cannons"].size() - 1)
+	Simulation.enforce_start_type(level)
+	selection = []
+	_structure_changed()
+
+
+func _modifier_held() -> bool:
+	return select_mode or Input.is_key_pressed(KEY_CTRL) or Input.is_key_pressed(KEY_SHIFT) or Input.is_key_pressed(KEY_META)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -427,14 +552,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.button_index != MOUSE_BUTTON_LEFT:
 			return
 		if event.pressed:
-			_pick(view.world_mouse())
-			# Pressing empty space grabs the camera instead of an object.
-			panning = not dragging
+			_press(view.world_mouse())
 		else:
-			dragging = false
-			panning = false
-			drag_mode = Drag.NONE
-			_update_cursor(view.world_mouse())
+			_release(view.world_mouse())
 	elif event is InputEventMouseMotion:
 		if camera.pinching():
 			return
@@ -448,14 +568,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_ESCAPE:
 			_on_back()
 		elif event.keycode == KEY_DELETE:
-			_delete_cannon(selected)
+			_delete_selection()
+		elif event.keycode == KEY_A and (event.ctrl_pressed or event.meta_pressed):
+			_select_all()
 
 
 func _exit_tree() -> void:
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
 
-## What a press at level point [param p] would grab: a cannon index, or a gate drag mode.
+# ---------------------------------------------------------------- picking & dragging
+
 func _hit_cannon(p: Vector2) -> int:
 	var best := -1
 	var best_d := PICK_RADIUS * PICK_RADIUS
@@ -501,38 +624,80 @@ func _cursor_for(mode: int) -> Input.CursorShape:
 		Drag.MOVE: return Input.CURSOR_MOVE
 		Drag.LEFT, Drag.RIGHT: return Input.CURSOR_HSIZE
 		Drag.TOP, Drag.BOTTOM: return Input.CURSOR_VSIZE
+		Drag.BAND: return Input.CURSOR_CROSS
 	return Input.CURSOR_ARROW
 
 
-func _pick(p: Vector2) -> void:
+func _press(p: Vector2) -> void:
+	drag_start = p
+	drag_moved = false
+	pressed_cannon = -1
+	var modifier := _modifier_held()
 	# Cannons are picked at their *current* (animated) position.
-	var best := _hit_cannon(p)
-	if best >= 0:
-		_select_cannon(best)
+	var hit := _hit_cannon(p)
+	if hit >= 0:
+		pressed_cannon = hit
+		if modifier:
+			_toggle_in_selection(hit)
+			return
+		if not selection.has(hit) or finish_selected:
+			_set_selection([hit])
+		# Group drag: remember where every selected cannon started.
 		dragging = true
 		drag_mode = Drag.MOVE
-		var c: Dictionary = level["cannons"][best]
-		drag_offset = Vector2(float(c["x"]), float(c["y"])) - sim.cannon_states[best]["pos"]
+		drag_positions.clear()
+		for i in selection:
+			var c: Dictionary = level["cannons"][i]
+			drag_positions[i] = Vector2(float(c["x"]), float(c["y"]))
+		drag_offset = drag_positions[hit] - sim.cannon_states[hit]["pos"]
 		_update_cursor(p)
 		return
 	var gate := _hit_gate(p)
-	if gate != Drag.NONE:
-		_select_finish()
+	if gate != Drag.NONE and not modifier:
+		_set_selection([], true)
 		dragging = true
 		drag_mode = gate
 		drag_anchor = sim.finish_rect()
 		drag_offset = drag_anchor.position - p
 		_update_cursor(p)
 		return
-	selected = -1
-	finish_selected = false
+	if modifier:
+		# Rubber band on empty space.
+		dragging = true
+		drag_mode = Drag.BAND
+		view.set_band(Rect2(p, Vector2.ZERO))
+		_update_cursor(p)
+		return
+	# Empty space: clear the selection and let the drag pan the camera.
+	_set_selection([])
+	panning = true
+
+
+func _release(p: Vector2) -> void:
+	if drag_mode == Drag.BAND:
+		var band := Rect2(drag_start, p - drag_start).abs()
+		var picked: Array[int] = selection.duplicate()
+		for i in sim.cannon_states.size():
+			if band.has_point(sim.cannon_states[i]["pos"]) and not picked.has(i):
+				picked.append(i)
+		view.set_band(Rect2())
+		_set_selection(picked)
+	elif drag_mode == Drag.MOVE and pressed_cannon >= 0 and not drag_moved and not _modifier_held() and selection.size() > 1:
+		# A plain click on one of several selected cannons, without moving: select just that one.
+		_set_selection([pressed_cannon])
 	dragging = false
+	panning = false
 	drag_mode = Drag.NONE
-	view.set_selection(-1, false)
-	_rebuild_inspector()
+	pressed_cannon = -1
+	_update_cursor(p)
 
 
 func _drag_to(p: Vector2) -> void:
+	if p.distance_to(drag_start) > CLICK_SLOP:
+		drag_moved = true
+	if drag_mode == Drag.BAND:
+		view.set_band(Rect2(drag_start, p - drag_start).abs())
+		return
 	var snapped_p := p.snapped(Vector2(GRID, GRID))
 	if finish_selected:
 		var f: Dictionary = level["finish"]
@@ -556,11 +721,17 @@ func _drag_to(p: Vector2) -> void:
 				f["h"] = clampf(snapped_p.y, a.position.y + MIN_GATE, Simulation.BASE_SIZE.y) - a.position.y
 		if drag_mode != Drag.MOVE:
 			_rebuild_inspector()   # keep the width / height spin boxes in sync
-	elif selected >= 0:
+	elif not selection.is_empty() and pressed_cannon >= 0:
+		# Move the whole group by the grabbed cannon's snapped displacement.
 		var target := (p + drag_offset).snapped(Vector2(GRID, GRID))
-		var c: Dictionary = level["cannons"][selected]
-		c["x"] = clampf(target.x, 0.0, Simulation.BASE_SIZE.x)
-		c["y"] = clampf(target.y, 0.0, Simulation.BASE_SIZE.y)
+		var delta: Vector2 = target - drag_positions[pressed_cannon]
+		for i in selection:
+			if not drag_positions.has(i):
+				continue
+			var c: Dictionary = level["cannons"][i]
+			var np: Vector2 = drag_positions[i] + delta
+			c["x"] = clampf(np.x, 0.0, Simulation.BASE_SIZE.x)
+			c["y"] = clampf(np.y, 0.0, Simulation.BASE_SIZE.y)
 	_mark_dirty()
 	sim.set_tick(sim.tick)
 	view.refresh()

@@ -186,11 +186,14 @@ static func dialog(parent: Control, title_text: String, width: float = 720.0) ->
 	return body
 
 
-static func label(text: String, size: int = 20, color: Color = TEXT) -> Label:
+static func label(text: String, size: int = 20, color: Color = TEXT, wrap: bool = false) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
+	if wrap:
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return l
 
 

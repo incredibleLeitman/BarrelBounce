@@ -93,31 +93,66 @@ func _test_editor_roundtrip() -> void:
 	var editor := await _swap_scene(GameState.SCENE_EDITOR)
 	check(editor.level["cannons"].size() == 1, "new level starts with one cannon")
 	editor._add_cannon()
-	check(editor.level["cannons"].size() == 2 and editor.selected == 1, "cannon added and selected")
+	check(editor.level["cannons"].size() == 2 and editor.primary() == 1, "cannon added and selected")
 	# Add an orbit behaviour the way the inspector does.
 	editor.level["cannons"][1]["behaviors"].append({"type": "orbit", "radius": 120.0, "period": 3.0, "clockwise": true})
 	editor._structure_changed()
 	check(editor.view.cannon_nodes.size() == 2, "view rebuilt with two cannon nodes")
 	# Preview advances the deterministic clock and the orbiting cannon moves.
-	var p0: Vector2 = editor.sim.cannon_states[1]["pos"]
+	var prev0: Vector2 = editor.sim.cannon_states[1]["pos"]
 	editor._toggle_preview()
 	for i in 30:
 		editor._physics_process(1.0 / 60.0)
-	var p1: Vector2 = editor.sim.cannon_states[1]["pos"]
-	check(p0.distance_to(p1) > 5.0, "preview animates the orbiting cannon")
+	var prev1: Vector2 = editor.sim.cannon_states[1]["pos"]
+	check(prev0.distance_to(prev1) > 5.0, "preview animates the orbiting cannon")
 	editor._toggle_preview()
 	check(editor.sim.tick == 0, "stopping preview rewinds to tick 0")
 	# Pick & drag cannon 0 at its position.
 	var c0: Dictionary = editor.level["cannons"][0]
-	editor._pick(Vector2(float(c0["x"]), float(c0["y"])))
-	check(editor.selected == 0 and editor.dragging, "picking a cannon selects it")
+	editor._press(Vector2(float(c0["x"]), float(c0["y"])))
+	check(editor.primary() == 0 and editor.dragging, "pressing a cannon selects it")
 	editor._drag_to(Vector2(333, 444))
+	editor._release(Vector2(333, 444))
 	check(float(c0["x"]) == 330.0 and float(c0["y"]) == 440.0, "dragging snaps to the 10 px grid")
+	# Multi-select: select mode toggles membership, group drag moves everything by the same delta.
+	editor.select_mode = true
+	var c1: Dictionary = editor.level["cannons"][1]
+	# Cannon 1 orbits, so it is picked at its animated position, not at its base.
+	var p1: Vector2 = editor.sim.cannon_states[1]["pos"]
+	editor._press(p1)
+	editor._release(p1)
+	check(editor.selection.size() == 2, "select mode adds a second cannon to the selection")
+	editor.select_mode = false
+	var x0: float = float(c0["x"])
+	var x1: float = float(c1["x"])
+	editor._press(p1)
+	check(editor.selection.size() == 2, "pressing a selected cannon keeps the group")
+	editor._drag_to(p1 + Vector2(100, 0))
+	editor._release(p1 + Vector2(100, 0))
+	check(float(c0["x"]) == x0 + 100.0 and float(c1["x"]) == x1 + 100.0, "group drag moves every selected cannon")
+	p1 = editor.sim.cannon_states[1]["pos"]
+	editor._press(p1)
+	editor._release(p1)
+	check(editor.selection.size() == 1 and editor.primary() == 1, "click without moving collapses the selection to that cannon")
+	# Rubber band in select mode picks everything inside.
+	editor.select_mode = true
+	editor._press(Vector2(5, 5))
+	editor._drag_to(Vector2(1270, 710))
+	editor._release(Vector2(1270, 710))
+	check(editor.selection.size() == 2, "rubber band selects both cannons")
+	editor.select_mode = false
+	# Editing a value with a multi-selection applies it to all selected cannons.
+	for c in editor._selected_cannons():
+		c["angle"] = -60.0
+	check(editor._common(editor._selected_cannons(), "angle", 0.0) == -60.0, "common value is reported when all agree")
+	c1["angle"] = -10.0
+	check(editor._common(editor._selected_cannons(), "angle", 0.0) == null, "mixed values are reported as null")
 	# Pick & drag the finish gate.
 	var fr: Rect2 = editor.sim.finish_rect()
-	editor._pick(fr.get_center())
-	check(editor.finish_selected, "picking the gate selects it")
+	editor._press(fr.get_center())
+	check(editor.finish_selected, "pressing the gate selects it")
 	editor._drag_to(fr.get_center() + Vector2(-100, 0))
+	editor._release(fr.get_center() + Vector2(-100, 0))
 	check(float(editor.level["finish"]["x"]) == fr.position.x - 100.0, "gate dragged")
 	# Camera and grid in the editor.
 	editor.camera.zoom_by(0.5, Vector2(400, 300))

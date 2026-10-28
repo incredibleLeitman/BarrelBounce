@@ -79,11 +79,33 @@ func refresh() -> void:
 		backdrop.theme_name = bg
 
 
-func set_selection(cannon_index: int, finish_selected: bool) -> void:
+func set_selection(indices: Array, finish_selected: bool) -> void:
 	for i in cannon_nodes.size():
-		cannon_nodes[i].selected = i == cannon_index
+		cannon_nodes[i].selected = indices.has(i)
 		cannon_nodes[i].queue_redraw()
 	finish_node.selected = finish_selected
+
+
+## Rubber-band selection rectangle in level coordinates; an empty rect hides it.
+func set_band(r: Rect2) -> void:
+	if band_node == null:
+		band_node = BandNode.new()
+		add_child(band_node)
+	band_node.rect = r
+	band_node.queue_redraw()
+
+
+var band_node: BandNode
+
+
+class BandNode extends Node2D:
+	var rect := Rect2()
+
+	func _draw() -> void:
+		if rect.size == Vector2.ZERO:
+			return
+		draw_rect(rect, Color(UI.ACCENT_2, 0.15))
+		draw_rect(rect, UI.ACCENT_2, false, -1.0)
 
 
 func redraw_all() -> void:
