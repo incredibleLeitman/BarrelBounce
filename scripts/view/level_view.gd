@@ -4,11 +4,10 @@ extends Node2D
 ## Keeps the 1280x720 play area centred in whatever window / phone aspect we get.
 
 var sim: Simulation
-## Optional second simulation replaying the best run, drawn as a translucent ghost.
-var ghost_sim: Simulation
+## Ghosts: translucent replays, each {"sim": Simulation, "node": PlayerNode}.
+var ghosts: Array = []
 var cannon_nodes: Array = []
 var player_node: PlayerNode
-var ghost_node: PlayerNode
 var finish_node: FinishNode
 var backdrop: Backdrop
 var show_hints := false
@@ -22,11 +21,6 @@ func _ready() -> void:
 	add_child(backdrop)
 	finish_node = FinishNode.new()
 	add_child(finish_node)
-	ghost_node = PlayerNode.new()
-	ghost_node.ghost = true
-	ghost_node.z_index = 2
-	ghost_node.visible = false
-	add_child(ghost_node)
 	player_node = PlayerNode.new()
 	player_node.z_index = 2   # above every cannon, selected ones included
 	add_child(player_node)
@@ -96,14 +90,28 @@ func refresh() -> void:
 		cannon_nodes[i].apply_state(sim.cannon_states[i], occupied, sim.fuse_left(i))
 	finish_node.set_rect(sim.finish_rect())
 	player_node.update_from(sim)
-	if ghost_sim:
-		ghost_node.update_from(ghost_sim)
+	for g in ghosts:
+		g["node"].update_from(g["sim"])
 
 
-func bind_ghost(s: Simulation) -> void:
-	ghost_sim = s
-	ghost_node.visible = s != null
-	ghost_node.clear_trail()
+## Replaces the ghosts: [param sims] is a list of {"sim": Simulation, "color": Color}.
+func bind_ghosts(sims: Array) -> void:
+	for g in ghosts:
+		g["node"].queue_free()
+	ghosts.clear()
+	for entry in sims:
+		var node := PlayerNode.new()
+		node.ghost = true
+		node.body_color = entry.get("color", Color.WHITE)
+		node.z_index = 2
+		add_child(node)
+		move_child(node, player_node.get_index())
+		ghosts.append({"sim": entry["sim"], "node": node})
+
+
+func clear_ghost_trails() -> void:
+	for g in ghosts:
+		g["node"].clear_trail()
 	var bg := str(sim.level.get("background", "space"))
 	if bg != backdrop.theme_name:
 		backdrop.theme_name = bg

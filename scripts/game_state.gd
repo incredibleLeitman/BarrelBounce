@@ -116,6 +116,7 @@ func new_level() -> Dictionary:
 		"format": 1,
 		"name": "My Level",
 		"author": player_name(),
+		"author_id": player_id(),
 		"cannons": [{"x": 160.0, "y": 560.0, "angle": -40.0, "type": "normal", "behaviors": []}],
 		"finish": {"x": 700.0, "y": 300.0, "w": 60.0, "h": 360.0},
 		"start": 0,
@@ -143,6 +144,18 @@ var profile: Dictionary = {}
 
 func player_name() -> String:
 	return str(profile.get("name", "Player"))
+
+
+## Stable id of this player, generated once; names can change, the id cannot.
+func player_id() -> String:
+	return str(profile.get("id", ""))
+
+
+## A player's name for display: "You" when it is this player.
+func display_name(name: String, id: String) -> String:
+	if id != "" and id == player_id():
+		return "You"
+	return name
 
 
 func player_color() -> Color:
@@ -182,6 +195,9 @@ func _load_profile() -> void:
 		profile["name"] = random_name()
 	if not profile.has("color"):
 		profile["color"] = PLAYER_COLORS[randi() % PLAYER_COLORS.size()]
+	if not profile.has("id") or str(profile["id"]).is_empty():
+		profile["id"] = "p_%d_%08x" % [Time.get_unix_time_from_system(), randi()]
+		set_profile(str(profile["name"]), str(profile["color"]))
 
 
 ## Hash of everything that affects play (not the name, author or background). A best time
@@ -234,19 +250,34 @@ func proof_for(level: Dictionary) -> Dictionary:
 	return {"rev": rev, "ticks": best["ticks"], "taps": best.get("taps", []), "player": best.get("player", player_name())}
 
 
+## The level creator's proof run for the current revision, or {}.
+func creator_proof(level: Dictionary) -> Dictionary:
+	return level["verified"] if is_verified(level) else {}
+
+
 func can_share(level: Dictionary) -> bool:
 	return not proof_for(level).is_empty()
 
 
 func save_user_level(level: Dictionary) -> bool:
 	level["modified"] = Time.get_unix_time_from_system()
-	# Attach the author's best run of this exact revision as the proof the level can be done.
+	if not level.has("author_id"):
+		level["author_id"] = player_id()
+	# The level's proof is the creator's run of this exact revision. A proof that came with
+	# an imported level is kept; our own best replaces it only when it is ours anyway or
+	# when there is none for this revision.
 	var rev := level_hash(level)
+	var existing = level.get("verified")
+	var keep := typeof(existing) == TYPE_DICTIONARY and str(existing.get("rev", "")) == rev \
+		and str(existing.get("player_id", "")) != player_id()
 	var best := best_entry(str(level["id"]), rev)
-	if best.is_empty():
+	if keep:
+		pass
+	elif best.is_empty():
 		level.erase("verified")
 	else:
-		level["verified"] = {"rev": rev, "ticks": best["ticks"], "taps": best.get("taps", []), "player": best.get("player", player_name())}
+		level["verified"] = {"rev": rev, "ticks": best["ticks"], "taps": best.get("taps", []),
+			"player": best.get("player", player_name()), "player_id": best.get("player_id", player_id())}
 	var f := FileAccess.open(USER_DIR + str(level["id"]) + ".json", FileAccess.WRITE)
 	if f == null:
 		push_error("Could not save level: " + str(FileAccess.get_open_error()))
@@ -349,7 +380,7 @@ func record_time(level_id: String, rev: String, ticks: int, taps: Array = []) ->
 	var best := best_ticks(level_id, rev)
 	if best >= 0 and ticks >= best:
 		return false
-	scores[level_id] = {"rev": rev, "ticks": ticks, "taps": taps.duplicate(), "player": player_name()}
+	scores[level_id] = {"rev": rev, "ticks": ticks, "taps": taps.duplicate(), "player": player_name(), "player_id": player_id()}
 	_save_scores()
 	return true
 

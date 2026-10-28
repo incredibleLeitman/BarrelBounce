@@ -120,17 +120,23 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 	var id := str(level.get("id", ""))
 	var rev := GameState.level_hash(level)
 	var best := GameState.best_ticks(id, rev)
-	var meta := "by %s  ·  %d cannons  ·  " % [str(level.get("author", "?")), level.get("cannons", []).size()]
+	var author := GameState.display_name(str(level.get("author", "?")), str(level.get("author_id", "")))
+	var meta_row := HBoxContainer.new()
+	meta_row.add_theme_constant_override("separation", 0)
+	info.add_child(meta_row)
+	meta_row.add_child(UI.label("by %s  ·  %d cannons  ·  " % [author, level.get("cannons", []).size()], 16, UI.MUTED))
+	var creator := GameState.creator_proof(level)
+	var creator_is_me := not creator.is_empty() and str(creator.get("player_id", "")) == GameState.player_id()
 	if best >= 0:
-		meta += "best " + Simulation.format_ticks(best)
+		# Orange when you hold the record: no creator time to beat, or yours is at least as good.
+		var record := creator.is_empty() or creator_is_me or best <= int(creator["ticks"])
+		meta_row.add_child(UI.label("best " + Simulation.format_ticks(best), 16, UI.ACCENT if record else UI.MUTED))
 	elif GameState.best_is_stale(id, rev):
-		meta += "level changed: best time reset"
+		meta_row.add_child(UI.label("level changed: best time reset", 16, UI.MUTED))
 	else:
-		meta += "not finished yet"
-	var proof := GameState.proof_for(level)
-	if not proof.is_empty() and str(proof.get("player", "")) != GameState.player_name():
-		meta += "  ·  %s: %s" % [str(proof["player"]), Simulation.format_ticks(int(proof["ticks"]))]
-	info.add_child(UI.label(meta, 16, UI.MUTED))
+		meta_row.add_child(UI.label("not finished yet", 16, UI.MUTED))
+	if not creator.is_empty() and not creator_is_me:
+		meta_row.add_child(UI.label("  ·  %s: %s" % [str(creator.get("player", "creator")), Simulation.format_ticks(int(creator["ticks"]))], 16, UI.MUTED))
 
 	if editable:
 		var share := UI.small_button("  Share  ")
@@ -183,12 +189,10 @@ func _show_share(level: Dictionary) -> void:
 		DisplayServer.clipboard_set(code)
 		UI.toast(root, "Code copied", UI.GOOD))
 	row.add_child(copy)
-	var select := UI.button("Select all", 48, 18)
-	select.pressed.connect(func():
-		box.grab_focus()
-		box.select_all())
-	row.add_child(select)
 	body.add_child(UI.label("%d characters" % code.length(), 13, UI.MUTED))
+	# The whole code is selected from the start, ready for Ctrl+C.
+	box.call_deferred("grab_focus")
+	box.call_deferred("select_all")
 
 
 func _show_import() -> void:
@@ -205,10 +209,12 @@ func _show_import() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	body.add_child(row)
-	var paste := UI.button("Paste from clipboard", 48, 18)
-	paste.pressed.connect(func(): box.text = DisplayServer.clipboard_get())
-	row.add_child(paste)
 	var do_import := UI.accent_button("Import", 48, 18)
+	var paste := UI.button("Paste & import", 48, 18)
+	paste.pressed.connect(func():
+		box.text = DisplayServer.clipboard_get()
+		do_import.pressed.emit())
+	row.add_child(paste)
 	do_import.pressed.connect(func():
 		var level := GameState.level_from_code(box.text)
 		if level.is_empty():
@@ -223,7 +229,7 @@ func _show_import() -> void:
 				shade.queue_free()
 			tab = Tab.MINE
 			_refresh()
-			UI.toast(root, "Imported “%s” by %s" % [str(level.get("name", "")), str(level.get("author", "?"))], UI.GOOD)
+			UI.toast(root, "Imported “%s” by %s" % [str(level.get("name", "")), GameState.display_name(str(level.get("author", "?")), str(level.get("author_id", "")))], UI.GOOD)
 		else:
 			status.text = "Could not save the level.")
 	row.add_child(do_import)

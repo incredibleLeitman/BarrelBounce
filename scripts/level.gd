@@ -10,10 +10,8 @@ var view: LevelView
 var level: Dictionary
 var rev: String                 # revision hash the times of this session belong to
 var taps: Array = []            # ticks the button was pressed on in the current attempt
-var ghost: Simulation           # replay of the best run, stepped in lockstep with sim
-var ghost_taps: Dictionary = {}
-var ghost_first_tap := 0        # absolute tick of the best run's first launch
-var ghost_owner := ""           # "your best" or "<player>'s run", for the HUD
+## Ghosts race on the run clock. Each: {"sim", "taps": {tick: true}, "first_tap", "label", "ticks"}.
+var ghosts: Array = []
 var ghost_armed := false        # true once the player fired and the ghost race is on
 var pending_fire := false
 var death_timer := 0.0
@@ -161,41 +159,55 @@ func _build_ui() -> void:
 func _update_best() -> void:
 	var id := str(level.get("id", ""))
 	var best := GameState.best_ticks(id, rev)
-	var ghost_text := ""
-	if ghost != null:
-		ghost_text = "  ·  ghost: " + ghost_owner
-	elif GameState.ghost_enabled() and GameState.is_verified(level) and best < 0:
-		ghost_text = ""
+	var parts: Array = []
 	if best >= 0:
-		best_label.text = "best " + Simulation.format_ticks(best) + ghost_text
-	elif ghost != null:
-		best_label.text = Simulation.format_ticks(int(level["verified"]["ticks"])) + " by " + str(level["verified"].get("player", "author")) + ghost_text
+		parts.append("best " + Simulation.format_ticks(best))
+	var creator := GameState.creator_proof(level)
+	if not creator.is_empty() and str(creator.get("player_id", "")) != GameState.player_id():
+		parts.append("%s: %s" % [str(creator.get("player", "author")), Simulation.format_ticks(int(creator["ticks"]))])
+	if not ghosts.is_empty():
+		var names: Array = []
+		for g in ghosts:
+			names.append(g["label"])
+		parts.append("ghost: " + ", ".join(names))
+	if not parts.is_empty():
+		best_label.text = "  ·  ".join(parts)
 	elif GameState.best_is_stale(id, rev):
 		best_label.text = "level changed: best time reset"
 	else:
 		best_label.text = "no time yet"
 
 
-## The ghost replays the best run of this revision: your own, or, until you have one, the
-## author's proof run that came with a shared level.
+## Ghosts replay the best runs of this revision: the level creator's proof run (white) and
+## your own best (your colour). Each races from the player's first launch.
 func _load_ghost() -> void:
-	var entry := GameState.best_entry(str(level.get("id", "")), rev)
-	ghost_owner = "your best"
-	if entry.is_empty() and GameState.is_verified(level):
-		entry = level["verified"]
-		ghost_owner = str(entry.get("player", "author")) + "'s run"
-	ghost_taps.clear()
-	if not GameState.ghost_enabled() or entry.is_empty() or entry.get("taps", []).is_empty():
-		ghost = null
-		view.bind_ghost(null)
-		return
-	ghost_first_tap = 1 << 30
-	for t in entry["taps"]:
-		ghost_taps[int(t)] = true
-		ghost_first_tap = mini(ghost_first_tap, int(t))
-	ghost = Simulation.new(level.duplicate(true))
+	ghosts.clear()
 	ghost_armed = false
-	view.bind_ghost(ghost)
+	if GameState.ghost_enabled():
+		var creator := GameState.creator_proof(level)
+		var own := GameState.best_entry(str(level.get("id", "")), rev)
+		var creator_is_me := not creator.is_empty() and str(creator.get("player_id", "")) == GameState.player_id()
+		if not creator.is_empty() and not creator_is_me:
+			_add_ghost(creator, str(creator.get("player", "author")), Color.WHITE)
+		if not own.is_empty():
+			_add_ghost(own, "you", GameState.player_color())
+	var binds: Array = []
+	for g in ghosts:
+		binds.append({"sim": g["sim"], "color": g["color"]})
+	view.bind_ghosts(binds)
+
+
+func _add_ghost(entry: Dictionary, label: String, color: Color) -> void:
+	var taps_list: Array = entry.get("taps", [])
+	if taps_list.is_empty():
+		return
+	var tap_set := {}
+	var first := 1 << 30
+	for t in taps_list:
+		tap_set[int(t)] = true
+		first = mini(first, int(t))
+	ghosts.append({"sim": Simulation.new(level.duplicate(true)), "taps": tap_set, "first_tap": first,
+		"label": label, "color": color, "ticks": int(entry.get("ticks", -1))})
 
 
 # ---------------------------------------------------------------- input
@@ -245,15 +257,16 @@ func _physics_process(delta: float) -> void:
 	var first_launch := pending_fire and sim.mode == Simulation.Mode.IN_CANNON and sim.run_start_tick < 0
 	sim.step(pending_fire)
 	pending_fire = false
-	if ghost:
-		# The ghost races on the run clock: it waits in the start cannon until the player's
-		# first launch, then plays its own run from its first launch onwards.
-		if first_launch and not ghost_armed:
-			ghost_armed = true
-			while ghost.tick < ghost_first_tap - 1:
-				ghost.step(false)
-		if ghost_armed:
-			ghost.step(ghost_taps.has(ghost.tick + 1))
+	# Ghosts race on the run clock: they wait in the start cannon until the player's first
+	# launch, then play their own run from their first launch onwards.
+	if first_launch and not ghost_armed:
+		ghost_armed = true
+		for g in ghosts:
+			while g["sim"].tick < g["first_tap"] - 1:
+				g["sim"].step(false)
+	if ghost_armed:
+		for g in ghosts:
+			g["sim"].step(g["taps"].has(g["sim"].tick + 1))
 	for e in sim.events:
 		match e:
 			"launch":
@@ -290,10 +303,10 @@ func _on_die() -> void:
 func _reset_run() -> void:
 	sim.reset()
 	taps.clear()
-	if ghost:
-		ghost.reset()
-		ghost_armed = false
-		view.ghost_node.clear_trail()
+	ghost_armed = false
+	for g in ghosts:
+		g["sim"].reset()
+	view.clear_ghost_trails()
 	view.player_node.clear_trail()
 	view.refresh()
 
@@ -313,6 +326,9 @@ func _on_finish() -> void:
 	var new_best := GameState.record_time(id, rev, ticks, taps)
 	win_time.text = Simulation.format_ticks(ticks)
 	win_best.text = "New best time! Your ghost will race you next time." if new_best else "best " + Simulation.format_ticks(GameState.best_ticks(id, rev))
+	var creator := GameState.creator_proof(level)
+	if new_best and not creator.is_empty() and str(creator.get("player_id", "")) != GameState.player_id() and ticks < int(creator["ticks"]):
+		win_best.text = "New best time, faster than %s!" % str(creator.get("player", "the creator"))
 	if new_best:
 		_load_ghost()
 	_update_best()

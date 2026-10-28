@@ -19,7 +19,8 @@ var blinks: Array = []   # [{from, to, age}]
 
 
 func _ready() -> void:
-	body_color = GameState.player_color()
+	if not ghost:
+		body_color = GameState.player_color()
 
 
 func update_from(sim: Simulation) -> void:
@@ -117,9 +118,10 @@ func _draw() -> void:
 func _draw_ghost() -> void:
 	if dead:
 		return
+	var c := body_color
 	for i in range(1, trail.size()):
 		var a := float(i) / trail.size()
-		draw_line(trail[i - 1] - position, trail[i] - position, Color(1, 1, 1, a * 0.18), 2.0)
-	draw_circle(Vector2.ZERO, 15.0, Color(1, 1, 1, 0.16))
-	draw_arc(Vector2.ZERO, 15.0, 0.0, TAU, 24, Color(1, 1, 1, 0.55), 2.0)
-	draw_circle(Vector2(-4, -5), 4.0, Color(1, 1, 1, 0.15))
+		draw_line(trail[i - 1] - position, trail[i] - position, Color(c, a * 0.2), 2.0)
+	draw_circle(Vector2.ZERO, 15.0, Color(c, 0.16))
+	draw_arc(Vector2.ZERO, 15.0, 0.0, TAU, 24, Color(c, 0.6), 2.0)
+	draw_circle(Vector2(-4, -5), 4.0, Color(c, 0.2))

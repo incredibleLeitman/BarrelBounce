@@ -60,7 +60,7 @@ func _test_play_with_taps() -> void:
 	var rev: String = GameState.level_hash(level)
 	check(GameState.best_ticks(level["id"], rev) == sim.finish_ticks, "best time was recorded for this revision")
 	check(GameState.best_entry(level["id"], rev)["taps"] == taps, "the winning taps were recorded with the time: %s" % str(taps))
-	check(scene.ghost != null and scene.view.ghost_node.visible, "ghost is loaded after a best time")
+	check(scene.ghosts.size() == 1 and scene.view.ghosts.size() == 1, "ghost is loaded after a best time")
 	check(GameState.can_share(level), "a finished level is shareable without re-saving it")
 	check(scene.win_panel.visible, "win panel is shown")
 	check(scene.next_button.visible, "next level button offered for a built-in level")
@@ -83,14 +83,14 @@ func _test_play_with_taps() -> void:
 	scene._restart()
 	for i in 120:
 		scene._physics_process(1.0 / 60.0)
-	check(scene.ghost.tick == 0 and not scene.ghost_armed, "ghost waits while the player waits")
+	check(scene.ghosts[0]["sim"].tick == 0 and not scene.ghost_armed, "ghost waits while the player waits")
 	scene.pending_fire = true
 	scene._physics_process(1.0 / 60.0)
-	check(scene.ghost_armed and scene.ghost.mode != Simulation.Mode.IN_CANNON, "ghost launches together with the player")
+	check(scene.ghost_armed and scene.ghosts[0]["sim"].mode != Simulation.Mode.IN_CANNON, "ghost launches together with the player")
 	var ghost_done := false
 	for i in 150:
-		if scene.ghost.mode == Simulation.Mode.FINISHED:
-			ghost_done = scene.ghost.finish_ticks == GameState.best_ticks(level["id"], rev)
+		if scene.ghosts[0]["sim"].mode == Simulation.Mode.FINISHED:
+			ghost_done = scene.ghosts[0]["sim"].finish_ticks == GameState.best_ticks(level["id"], rev)
 			break
 		scene._physics_process(1.0 / 60.0)
 	check(ghost_done, "ghost finishes in the best time")
@@ -389,12 +389,23 @@ func _test_ghost_and_fairness() -> void:
 	tampered["verified"]["ticks"] = 1
 	check(GameState.level_from_code(GameState.level_to_code(tampered)).is_empty(), "a code whose proof time was tampered with is rejected")
 	# The author's proof run is the receiver's ghost until they have a best of their own.
+	# Simulate receiving it from someone else: a different creator id on the proof.
+	imported["verified"]["player_id"] = "p_someone_else"
+	imported["verified"]["player"] = "Someone"
+	imported["author_id"] = "p_someone_else"
+	GameState.save_user_level(imported)
+	check(GameState.is_verified(imported), "saving an imported level keeps the creator's proof")
 	GameState.current_level = imported
 	var scene := await _swap_scene(GameState.SCENE_LEVEL)
-	check(scene.ghost != null and scene.ghost_owner.ends_with("'s run"), "imported level uses the author's run as ghost: %s" % scene.ghost_owner)
+	check(scene.ghosts.size() == 1 and scene.ghosts[0]["label"] == "Someone", "imported level uses the creator's run as ghost")
+	# Beat it yourself: both ghosts race next time.
+	GameState.record_time(imported["id"], GameState.level_hash(imported), solved_ticks, [1])
+	scene._load_ghost()
+	check(scene.ghosts.size() == 2 and scene.ghosts[1]["label"] == "you", "creator ghost and own ghost together")
 	GameState.set_ghost_enabled(false)
 	scene._load_ghost()
-	check(scene.ghost == null, "ghost can be switched off")
+	check(scene.ghosts.is_empty(), "ghosts can be switched off")
+	check(GameState.display_name("Whoever", GameState.player_id()) == "You" and GameState.display_name("Someone", "p_x") == "Someone", "own player id shows as You")
 	GameState.set_ghost_enabled(true)
 	scene.queue_free()
 	await get_tree().process_frame
