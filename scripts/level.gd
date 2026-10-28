@@ -35,9 +35,22 @@ func _ready() -> void:
 	add_child(view)
 	view.bind(sim)
 	camera = CameraRig.new()
-	camera.limit_rect = Rect2(Vector2.ZERO, get_viewport_rect().size).merge(Rect2(view.position + Simulation.WORLD.position, Simulation.WORLD.size))
 	add_child(camera)
+	_fit_camera()
+	get_viewport().size_changed.connect(_fit_camera)
 	_build_ui()
+
+
+## Levels larger than the screen start zoomed out so they are fully visible; zooming in
+## up to the default view stays allowed.
+func _fit_camera() -> void:
+	var vp := get_viewport_rect().size
+	camera.limit_rect = Rect2(Vector2.ZERO, vp).merge(Rect2(view.position + sim.world.position, sim.world.size))
+	var fit := minf(1.0, minf(vp.x / sim.size.x, vp.y / sim.size.y))
+	camera.zoom_min = minf(CameraRig.ZOOM_MIN, fit)
+	camera.zoom = Vector2(fit, fit)
+	camera.position = view.position + sim.size * 0.5
+	camera.clamp_position()
 
 
 func _build_ui() -> void:

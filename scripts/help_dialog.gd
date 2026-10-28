@@ -7,6 +7,7 @@ const BEHAVIOR_HELP := {
 	"sweep": "Swings back and forth between two angles (relative to the base angle) in the given period.",
 	"move": "Slides from its base position in one of 8 directions and back, over the given range and period.",
 	"orbit": "Circles around its base position with the given radius and period.",
+	"path": "Follows a path of points you place in the editor, as a smooth curve or straight lines, looping around or going back and forth.",
 }
 
 

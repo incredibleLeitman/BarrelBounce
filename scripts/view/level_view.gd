@@ -27,16 +27,22 @@ func _ready() -> void:
 		rebuild()
 
 
+## Play area size of the bound level (the default until a simulation is bound).
+func level_size() -> Vector2:
+	return sim.size if sim else Simulation.BASE_SIZE
+
+
 func center_in_viewport() -> void:
 	var vp := get_viewport_rect().size
+	var size := level_size()
 	if fit_inset == Rect2():
 		scale = Vector2.ONE
-		position = ((vp - Simulation.BASE_SIZE) * 0.5).floor()
+		position = ((vp - size) * 0.5).floor()
 		return
 	var avail := vp - fit_inset.position - fit_inset.size
-	var s := minf(1.0, minf(avail.x / Simulation.BASE_SIZE.x, avail.y / Simulation.BASE_SIZE.y))
+	var s := minf(1.0, minf(avail.x / size.x, avail.y / size.y))
 	scale = Vector2(s, s)
-	position = (fit_inset.position + (avail - Simulation.BASE_SIZE * s) * 0.5).floor()
+	position = (fit_inset.position + (avail - size * s) * 0.5).floor()
 
 
 func bind(s: Simulation) -> void:
@@ -51,7 +57,10 @@ func rebuild() -> void:
 		n.queue_free()
 	cannon_nodes.clear()
 	backdrop.show_bounds = show_hints
+	backdrop.level_size = sim.size
+	backdrop.world_rect = sim.world
 	backdrop.queue_redraw()
+	center_in_viewport()
 	var per_type: Dictionary = {}
 	for c in sim.cannons:
 		var node := CannonNode.new(c)

@@ -13,6 +13,7 @@ func _ready() -> void:
 	await _test_editor_roundtrip()
 	await _test_level_select_lists_saved_level()
 	_test_level_codes()
+	_test_paths_and_size()
 	print("SMOKE TEST " + ("PASSED" if failures == 0 else "FAILED (%d)" % failures))
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -147,6 +148,34 @@ func _test_editor_roundtrip() -> void:
 	check(editor._common(editor._selected_cannons(), "angle", 0.0) == -60.0, "common value is reported when all agree")
 	c1["angle"] = -10.0
 	check(editor._common(editor._selected_cannons(), "angle", 0.0) == null, "mixed values are reported as null")
+	# Path editing on cannon 1 (single selection): add a path, place a point, drag it.
+	editor._set_selection([1])
+	c1["behaviors"].append({"type": "path", "points": [], "period": 4.0, "smooth": true, "closed": true})
+	editor._structure_changed()
+	editor.path_edit = c1["behaviors"].size() - 1
+	var base1 := Vector2(float(c1["x"]), float(c1["y"]))
+	editor._press(base1 + Vector2(203, -97))
+	editor._release(base1 + Vector2(203, -97))
+	check(c1["behaviors"][editor.path_edit]["points"] == [[200.0, -100.0]], "tapping in path mode adds a snapped point")
+	editor._press(base1 + Vector2(200, -100))
+	editor._drag_to(base1 + Vector2(300, -100))
+	editor._release(base1 + Vector2(300, -100))
+	check(c1["behaviors"][editor.path_edit]["points"] == [[300.0, -100.0]], "dragging a point moves it")
+	editor._set_selection([1])
+	check(editor.path_edit == -1, "changing the selection leaves path mode")
+	c1["behaviors"].pop_back()
+	editor._structure_changed()
+	# Wheel over the inspector must not zoom.
+	var wheel := InputEventMouseButton.new()
+	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	wheel.pressed = true
+	wheel.position = editor.inspector.get_global_rect().get_center()
+	editor._unhandled_input(wheel)
+	check(editor.camera.zoom.x == 1.0, "wheel over the inspector does not zoom")
+	wheel.position = Vector2(300, 300)
+	editor._unhandled_input(wheel)
+	check(editor.camera.zoom.x < 1.0, "wheel over the level zooms")
+	editor.camera.reset_view()
 	# Pick & drag the finish gate.
 	var fr: Rect2 = editor.sim.finish_rect()
 	editor._press(fr.get_center())
@@ -211,3 +240,35 @@ func _test_level_codes() -> void:
 	check(back["id"] != level["id"], "imported level gets a fresh id")
 	check(GameState.level_from_code("hello").is_empty(), "garbage is rejected")
 	check(GameState.level_from_code("BB1:aGVsbG8=").is_empty(), "non-level payload is rejected")
+
+
+func _test_paths_and_size() -> void:
+	print("path movement and level size")
+	var b := {"type": "path", "points": [[200.0, 0.0], [200.0, 100.0]], "period": 4.0, "smooth": false, "closed": true}
+	var line := Simulation.path_polyline(b)
+	check(line.size() == 3, "straight path keeps its control points")
+	check(Simulation.point_along(line, true, 0.0) == Vector2.ZERO, "path starts at the cannon base")
+	var quarter := Simulation.point_along(line, true, 0.25)
+	check(quarter.y == 0.0 and quarter.x > 0.0, "constant speed: a quarter of the loop is still on the first leg")
+	var c := {"x": 100.0, "y": 100.0, "angle": 0.0, "behaviors": [b]}
+	var at0: Vector2 = Simulation.cannon_state_at(c, 0)["pos"]
+	var at240: Vector2 = Simulation.cannon_state_at(c, 240)["pos"]
+	check(at0 == Vector2(100, 100) and at0.distance_to(at240) < 0.01, "closed path returns to the base after one period")
+	b["smooth"] = true
+	b["points"] = [[200.0, 0.0], [200.0, 100.0], [0.0, 100.0]]
+	check(Simulation.path_polyline(b).size() == 4 * Simulation.PATH_SAMPLES, "smooth path is sampled per segment")
+	b["closed"] = false
+	var p_half: Vector2 = Simulation.cannon_state_at(c, 120)["pos"]
+	var p_full: Vector2 = Simulation.cannon_state_at(c, 240)["pos"]
+	check(p_half.distance_to(Vector2(100, 100)) > 50.0 and p_full.distance_to(Vector2(100, 100)) < 0.01, "open path ping-pongs back to the base")
+	# Level size
+	var big := GameState.normalize_level({"width": 2000, "height": 1000, "cannons": [{"x": 10, "y": 10, "angle": 0}]})
+	var sim := Simulation.new(big)
+	check(sim.size == Vector2(2000, 1000) and sim.world.end.x == 2080.0, "level size and death bounds follow the level")
+	sim.mode = Simulation.Mode.FLYING
+	sim.pos = Vector2(1900, 500)
+	sim.vel = Vector2.ZERO
+	sim.step(false)
+	check(sim.mode == Simulation.Mode.FLYING, "a point inside the bigger level is alive")
+	var tiny := GameState.normalize_level({"width": 100, "cannons": [{"x": 10, "y": 10, "angle": 0}]})
+	check(Simulation.level_size(tiny).x == Simulation.MIN_SIZE.x, "sizes are clamped to the minimum")

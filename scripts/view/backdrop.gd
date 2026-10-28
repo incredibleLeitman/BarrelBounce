@@ -18,6 +18,9 @@ var theme_name := "space":
 var show_bounds := false
 ## Editor alignment grid: faint 10 px lines (the snap step) with stronger lines every 50 px.
 var show_grid := false
+## Play area and death bounds of the level being drawn (set by LevelView).
+var level_size: Vector2 = Simulation.BASE_SIZE
+var world_rect: Rect2 = Simulation.WORLD
 var t := 0.0
 
 
@@ -38,9 +41,9 @@ func _draw() -> void:
 	if show_grid:
 		_draw_grid()
 	# Play area outline, visible in every theme.
-	draw_rect(Rect2(Vector2.ZERO, Simulation.BASE_SIZE), Color(1, 1, 1, 0.08), false, 2.0)
+	draw_rect(Rect2(Vector2.ZERO, level_size), Color(1, 1, 1, 0.08), false, 2.0)
 	if show_bounds:
-		_draw_dashed_rect(Simulation.WORLD, Color(UI.BAD, 0.35))
+		_draw_dashed_rect(world_rect, Color(UI.BAD, 0.35))
 
 
 func _rng(seed_value: int) -> RandomNumberGenerator:
@@ -63,8 +66,8 @@ func _draw_space() -> void:
 	for i in 140:
 		var p := Vector2(rng.randf_range(-800, 2100), rng.randf_range(-700, 760))
 		draw_circle(p, rng.randf_range(1.0, 2.6), Color(1, 1, 1, rng.randf_range(0.15, 0.55)))
-	draw_rect(Rect2(-4000, Simulation.BASE_SIZE.y, 8000, 4000), Color("#0a1122"))
-	draw_rect(Rect2(-4000, Simulation.BASE_SIZE.y, 8000, 6), Color("#2b3b63"))
+	draw_rect(Rect2(-4000, level_size.y, 8000, 4000), Color("#0a1122"))
+	draw_rect(Rect2(-4000, level_size.y, 8000, 6), Color("#2b3b63"))
 
 
 func _draw_underwater() -> void:
@@ -83,15 +86,15 @@ func _draw_underwater() -> void:
 		var y := 800.0 - fmod(rng.randf_range(0, 1500) + t * speed, 1500.0)
 		draw_arc(Vector2(x, y), rng.randf_range(2, 7), 0.0, TAU, 12, Color(1, 1, 1, 0.3), 1.5)
 	# Sandy floor with sea plants.
-	draw_rect(Rect2(-4000, Simulation.BASE_SIZE.y, 8000, 4000), Color("#c9b27c"))
-	draw_rect(Rect2(-4000, Simulation.BASE_SIZE.y, 8000, 8), Color("#e6d4a2"))
+	draw_rect(Rect2(-4000, level_size.y, 8000, 4000), Color("#c9b27c"))
+	draw_rect(Rect2(-4000, level_size.y, 8000, 8), Color("#e6d4a2"))
 	var prng := _rng(99)
 	for i in 30:
 		var x := prng.randf_range(-700, 2000)
 		var h := prng.randf_range(40, 130)
 		var sway := sin(t * 1.5 + i) * 10.0
-		draw_line(Vector2(x, 720), Vector2(x + sway, 720 - h), Color("#2f8f5b"), 5.0)
-		draw_line(Vector2(x + 8, 720), Vector2(x + 8 + sway * 0.6, 720 - h * 0.6), Color("#3fae6e"), 4.0)
+		draw_line(Vector2(x, level_size.y), Vector2(x + sway, level_size.y - h), Color("#2f8f5b"), 5.0)
+		draw_line(Vector2(x + 8, level_size.y), Vector2(x + 8 + sway * 0.6, level_size.y - h * 0.6), Color("#3fae6e"), 4.0)
 
 
 func _draw_meadow() -> void:
@@ -113,11 +116,11 @@ func _draw_meadow() -> void:
 		draw_circle(Vector2(x + 76 * s, y), 32 * s, c)
 		draw_rect(Rect2(x - 10 * s, y, 110 * s, 30 * s), c)
 	# Rolling hills and the ground.
-	draw_rect(Rect2(-4000, Simulation.BASE_SIZE.y, 8000, 4000), Color("#5aa83c"))
+	draw_rect(Rect2(-4000, level_size.y, 8000, 4000), Color("#5aa83c"))
 	for i in 7:
 		var cx := -600.0 + i * 420.0
-		draw_circle(Vector2(cx, 820), 220.0, Color("#6dbb47"))
-	draw_rect(Rect2(-4000, Simulation.BASE_SIZE.y, 8000, 10), Color("#7fd255"))
+		draw_circle(Vector2(cx, level_size.y + 100.0), 220.0, Color("#6dbb47"))
+	draw_rect(Rect2(-4000, level_size.y, 8000, 10), Color("#7fd255"))
 
 
 func _draw_sunset() -> void:
@@ -139,8 +142,8 @@ func _draw_sunset() -> void:
 		pts.append(Vector2(4000, 4000))
 		pts.append(Vector2(-4000, 4000))
 		draw_colored_polygon(pts, col)
-	draw_rect(Rect2(-4000, Simulation.BASE_SIZE.y, 8000, 4000), Color("#2b1b3d"))
-	draw_rect(Rect2(-4000, Simulation.BASE_SIZE.y, 8000, 6), Color("#6b3f7a"))
+	draw_rect(Rect2(-4000, level_size.y, 8000, 4000), Color("#2b1b3d"))
+	draw_rect(Rect2(-4000, level_size.y, 8000, 6), Color("#6b3f7a"))
 
 
 func _draw_cave() -> void:
@@ -157,19 +160,19 @@ func _draw_cave() -> void:
 		var x := rng.randf_range(-700, 2000)
 		var w := rng.randf_range(20, 50)
 		var h := rng.randf_range(40, 140)
-		draw_colored_polygon(PackedVector2Array([Vector2(x - w, 722), Vector2(x + w, 722), Vector2(x, 722 - h)]), Color("#3a2d42"))
+		draw_colored_polygon(PackedVector2Array([Vector2(x - w, level_size.y + 2.0), Vector2(x + w, level_size.y + 2.0), Vector2(x, level_size.y + 2.0 - h)]), Color("#3a2d42"))
 	# Glowing crystals.
 	for i in 16:
 		var p := Vector2(rng.randf_range(-600, 1900), rng.randf_range(-500, 700))
 		var c := Color("#7fe3ff") if i % 2 == 0 else Color("#c77dff")
 		draw_circle(p, 18.0, Color(c, 0.12))
 		draw_colored_polygon(PackedVector2Array([p + Vector2(-5, 6), p + Vector2(5, 6), p + Vector2(0, -10)]), Color(c, 0.8))
-	draw_rect(Rect2(-4000, Simulation.BASE_SIZE.y, 8000, 4000), Color("#120e17"))
-	draw_rect(Rect2(-4000, Simulation.BASE_SIZE.y, 8000, 6), Color("#4a3a55"))
+	draw_rect(Rect2(-4000, level_size.y, 8000, 4000), Color("#120e17"))
+	draw_rect(Rect2(-4000, level_size.y, 8000, 6), Color("#4a3a55"))
 
 
 func _draw_grid() -> void:
-	var size := Simulation.BASE_SIZE
+	var size := level_size
 	var minor := Color(1, 1, 1, 0.09)
 	var major := Color(1, 1, 1, 0.26)
 	# Width -1 is a hairline: always one screen pixel, whatever the zoom or editor scale.

@@ -71,6 +71,7 @@ tap. The editor locks the type of the start cannon and loading a level enforces 
 | `sweep` | `from`, `to` °, `period` s | ping-pong between two angles (relative to the base angle) |
 | `move` | `dir` (8 directions), `range` px, `period` s | ping-pong along a line |
 | `orbit` | `radius` px, `period` s, `clockwise` | circle around the base position |
+| `path` | `points` [[dx,dy],…] relative to the base, `period` s, `smooth`, `closed` | follows the points at constant speed: a Catmull-Rom curve or straight lines, looping around or ping-ponging back |
 
 ### Level format
 
@@ -122,8 +123,10 @@ characters). Send it any way you like; the receiver pastes it under **Import cod
 level lands in their *My levels* with the original author's name and a fresh id. The
 `BB1:` prefix versions the format so later versions can still read old codes.
 
-Coordinates are in the 1280x720 play area (y down). Angles: 0° = right, -90° = up.
-Leaving the rectangle `Simulation.WORLD` (a bit larger than the screen) kills the ball.
+Coordinates are in the play area (y down), which is 1280x720 unless the level sets `width` /
+`height` (640..3840 x 360..2160, under *Settings* in the editor; bigger levels start zoomed
+out). Angles: 0° = right, -90° = up. Leaving the play area by more than 80 px sideways or
+below, or 640 px above, kills the ball.
 
 ## Running
 

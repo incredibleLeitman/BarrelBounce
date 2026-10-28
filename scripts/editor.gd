@@ -15,7 +15,8 @@ const EDGE_GRAB := 12.0      # distance (level px) from a gate edge that grabs i
 const MIN_GATE := 20.0
 const CLICK_SLOP := 6.0      # level px of movement that still counts as a click
 
-enum Drag { NONE, MOVE, LEFT, RIGHT, TOP, BOTTOM, BAND }
+enum Drag { NONE, MOVE, LEFT, RIGHT, TOP, BOTTOM, BAND, HANDLE }
+const HANDLE_RADIUS := 16.0  # level px within which a path point can be grabbed
 
 var level: Dictionary
 var sim: Simulation
@@ -35,6 +36,8 @@ var pressed_cannon := -1         # cannon under the press, for the release-colla
 var panning := false             # dragging empty space (or the middle mouse button) moves the camera
 var previewing := false
 var select_mode := false         # touch-friendly stand-in for holding Ctrl
+var path_edit := -1              # behaviour index of the primary cannon whose path is being edited
+var handle_index := -1           # control point being dragged in path edit mode
 var camera: CameraRig
 var grid_button: Button
 var select_button: Button
@@ -70,7 +73,7 @@ func _ready() -> void:
 
 func _update_camera_limits() -> void:
 	# The view is scaled to fit beside the inspector, so the world bounds scale with it.
-	var world := Rect2(view.position + Simulation.WORLD.position * view.scale.x, Simulation.WORLD.size * view.scale.x)
+	var world := Rect2(view.position + sim.world.position * view.scale.x, sim.world.size * view.scale.x)
 	# Merge with the viewport so the default view stays put when the scaled world is smaller than the screen.
 	camera.limit_rect = Rect2(Vector2.ZERO, get_viewport_rect().size).merge(world)
 	camera.clamp_position()
@@ -364,8 +367,11 @@ func _build_cannon_inspector() -> void:
 				b[p[0]] = p[5]
 			if Simulation.BEHAVIORS[kind].has("dir"):
 				b["dir"] = "right"
-			if Simulation.BEHAVIORS[kind].has("clockwise"):
-				b["clockwise"] = true
+			for flag in ["clockwise", "smooth", "closed"]:
+				if Simulation.BEHAVIORS[kind].has(flag):
+					b[flag] = true
+			if Simulation.BEHAVIORS[kind].has("default_points"):
+				b["points"] = Simulation.BEHAVIORS[kind]["default_points"].duplicate(true)
 			c["behaviors"].append(b)
 		_structure_changed())
 	bh.add_child(add_opt)
@@ -449,14 +455,77 @@ func _build_behavior_row(cannons: Array, bi: int) -> void:
 			set_all.call("dir", Simulation.DIR_ORDER[i])
 			_params_changed())
 		grid.add_child(opt)
-	if spec.has("clockwise"):
-		grid.add_child(UI.label("Clockwise", 15, UI.MUTED))
+	for flag in [["clockwise", "Clockwise"], ["smooth", "Smooth curve"], ["closed", "Loop around"]]:
+		if not spec.has(flag[0]):
+			continue
+		grid.add_child(UI.label(flag[1], 15, UI.MUTED))
 		var cb := CheckBox.new()
-		cb.button_pressed = bool(b.get("clockwise", true))
+		var key: String = flag[0]
+		cb.button_pressed = bool(b.get(key, true))
 		cb.toggled.connect(func(on):
-			set_all.call("clockwise", on)
+			set_all.call(key, on)
 			_params_changed())
 		grid.add_child(cb)
+	if kind == "path":
+		_build_path_tools(box, cannons, bi)
+
+
+## Point editing for a path behaviour (single selection only).
+func _build_path_tools(box: VBoxContainer, cannons: Array, bi: int) -> void:
+	var b: Dictionary = cannons[0]["behaviors"][bi]
+	var count: int = b.get("points", []).size()
+	if cannons.size() > 1:
+		box.add_child(UI.label("%d points · select a single cannon to edit them" % count, 13, UI.MUTED, true))
+		return
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	box.add_child(row)
+	var edit := UI.small_button("  Edit points  ")
+	edit.toggle_mode = true
+	edit.button_pressed = path_edit == bi
+	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	edit.toggled.connect(func(on):
+		path_edit = bi if on else -1
+		_update_cursor(view.world_mouse()))
+	row.add_child(edit)
+	var undo := UI.small_button("  Undo point  ")
+	undo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	undo.disabled = count == 0
+	undo.pressed.connect(func():
+		b["points"].pop_back()
+		_params_changed()
+		_rebuild_inspector())
+	row.add_child(undo)
+	box.add_child(UI.label("%d points" % count, 13, UI.MUTED))
+	if path_edit == bi:
+		box.add_child(UI.label("Tap in the level to add points, drag a point to move it.", 13, UI.MUTED, true))
+
+
+## Base position of the primary cannon (path points are relative to it).
+func _primary_base() -> Vector2:
+	var c: Dictionary = level["cannons"][primary()]
+	return Vector2(float(c["x"]), float(c["y"]))
+
+
+func _path_behavior() -> Dictionary:
+	if path_edit < 0 or primary() < 0:
+		return {}
+	var bs: Array = level["cannons"][primary()]["behaviors"]
+	if path_edit >= bs.size() or str(bs[path_edit].get("type", "")) != "path":
+		return {}
+	return bs[path_edit]
+
+
+func _hit_handle(p: Vector2) -> int:
+	var b := _path_behavior()
+	if b.is_empty():
+		return -1
+	var base := _primary_base()
+	var pts: Array = b.get("points", [])
+	for i in pts.size():
+		if p.distance_to(base + Vector2(float(pts[i][0]), float(pts[i][1]))) <= HANDLE_RADIUS:
+			return i
+	return -1
 
 
 # ---------------------------------------------------------------- editing
@@ -489,6 +558,7 @@ func _structure_changed() -> void:
 
 
 func _set_selection(indices: Array, finish := false) -> void:
+	path_edit = -1
 	selection.clear()
 	for i in indices:
 		selection.append(int(i))
@@ -514,7 +584,7 @@ func _select_all() -> void:
 
 
 func _add_cannon() -> void:
-	var c := {"x": 640.0, "y": 400.0, "angle": -45.0, "type": "normal", "behaviors": []}
+	var c := {"x": sim.size.x * 0.5, "y": sim.size.y * 0.55, "angle": -45.0, "type": "normal", "behaviors": []}
 	level["cannons"].append(c)
 	selection = [level["cannons"].size() - 1]
 	finish_selected = false
@@ -544,7 +614,20 @@ func _modifier_held() -> bool:
 	return select_mode or Input.is_key_pressed(KEY_CTRL) or Input.is_key_pressed(KEY_SHIFT) or Input.is_key_pressed(KEY_META)
 
 
+## True when a screen point is over the inspector or the top bar.
+func _over_ui(screen_point: Vector2) -> bool:
+	return inspector.get_global_rect().has_point(screen_point) or screen_point.y < 66.0
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and _over_ui(event.position):
+		# Wheel over the inspector scrolls or edits values there; it must never zoom the level.
+		if not event.pressed:
+			_release(view.world_mouse())
+		return
+	if event is InputEventMouseMotion and not dragging and not panning and _over_ui(event.position):
+		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+		return
 	if camera.handle_zoom_input(event):
 		return
 	if event is InputEventMouseButton:
@@ -568,9 +651,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			_update_cursor(view.world_mouse())
 	elif event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE:
-			_on_back()
+			if path_edit >= 0:
+				path_edit = -1
+				_rebuild_inspector()
+			else:
+				_on_back()
 		elif event.keycode == KEY_DELETE:
-			_delete_selection()
+			if path_edit >= 0:
+				var b := _path_behavior()
+				if not b.is_empty() and not b["points"].is_empty():
+					b["points"].pop_back()
+					_params_changed()
+					_rebuild_inspector()
+			else:
+				_delete_selection()
 		elif event.keycode == KEY_A and (event.ctrl_pressed or event.meta_pressed):
 			_select_all()
 
@@ -614,6 +708,8 @@ func _update_cursor(p: Vector2) -> void:
 	var shape := Input.CURSOR_ARROW
 	if dragging:
 		shape = _cursor_for(drag_mode)
+	elif path_edit >= 0:
+		shape = Input.CURSOR_MOVE if _hit_handle(p) >= 0 else Input.CURSOR_CROSS
 	elif _hit_cannon(p) >= 0:
 		shape = Input.CURSOR_MOVE
 	else:
@@ -627,6 +723,7 @@ func _cursor_for(mode: int) -> Input.CursorShape:
 		Drag.LEFT, Drag.RIGHT: return Input.CURSOR_HSIZE
 		Drag.TOP, Drag.BOTTOM: return Input.CURSOR_VSIZE
 		Drag.BAND: return Input.CURSOR_CROSS
+		Drag.HANDLE: return Input.CURSOR_MOVE
 	return Input.CURSOR_ARROW
 
 
@@ -635,6 +732,19 @@ func _press(p: Vector2) -> void:
 	drag_moved = false
 	pressed_cannon = -1
 	var modifier := _modifier_held()
+	if path_edit >= 0 and not _path_behavior().is_empty():
+		var b := _path_behavior()
+		handle_index = _hit_handle(p)
+		if handle_index < 0:
+			var rel := (p - _primary_base()).snapped(Vector2(GRID, GRID))
+			b["points"].append([rel.x, rel.y])
+			handle_index = b["points"].size() - 1
+			_rebuild_inspector()
+		dragging = true
+		drag_mode = Drag.HANDLE
+		_params_changed()
+		_update_cursor(p)
+		return
 	# Cannons are picked at their *current* (animated) position.
 	var hit := _hit_cannon(p)
 	if hit >= 0:
@@ -700,6 +810,13 @@ func _drag_to(p: Vector2) -> void:
 	if drag_mode == Drag.BAND:
 		view.set_band(Rect2(drag_start, p - drag_start).abs())
 		return
+	if drag_mode == Drag.HANDLE:
+		var b := _path_behavior()
+		if not b.is_empty() and handle_index >= 0 and handle_index < b["points"].size():
+			var rel := (p - _primary_base()).snapped(Vector2(GRID, GRID))
+			b["points"][handle_index] = [rel.x, rel.y]
+			_params_changed()
+		return
 	var snapped_p := p.snapped(Vector2(GRID, GRID))
 	if finish_selected:
 		var f: Dictionary = level["finish"]
@@ -707,20 +824,20 @@ func _drag_to(p: Vector2) -> void:
 		match drag_mode:
 			Drag.MOVE:
 				var target := (p + drag_offset).snapped(Vector2(GRID, GRID))
-				f["x"] = clampf(target.x, 0.0, Simulation.BASE_SIZE.x - a.size.x)
-				f["y"] = clampf(target.y, 0.0, Simulation.BASE_SIZE.y - a.size.y)
+				f["x"] = clampf(target.x, 0.0, sim.size.x - a.size.x)
+				f["y"] = clampf(target.y, 0.0, sim.size.y - a.size.y)
 			Drag.LEFT:
 				var x := clampf(snapped_p.x, 0.0, a.end.x - MIN_GATE)
 				f["x"] = x
 				f["w"] = a.end.x - x
 			Drag.RIGHT:
-				f["w"] = clampf(snapped_p.x, a.position.x + MIN_GATE, Simulation.BASE_SIZE.x) - a.position.x
+				f["w"] = clampf(snapped_p.x, a.position.x + MIN_GATE, sim.size.x) - a.position.x
 			Drag.TOP:
 				var y := clampf(snapped_p.y, 0.0, a.end.y - MIN_GATE)
 				f["y"] = y
 				f["h"] = a.end.y - y
 			Drag.BOTTOM:
-				f["h"] = clampf(snapped_p.y, a.position.y + MIN_GATE, Simulation.BASE_SIZE.y) - a.position.y
+				f["h"] = clampf(snapped_p.y, a.position.y + MIN_GATE, sim.size.y) - a.position.y
 		if drag_mode != Drag.MOVE:
 			_rebuild_inspector()   # keep the width / height spin boxes in sync
 	elif not selection.is_empty() and pressed_cannon >= 0:
@@ -732,8 +849,8 @@ func _drag_to(p: Vector2) -> void:
 				continue
 			var c: Dictionary = level["cannons"][i]
 			var np: Vector2 = drag_positions[i] + delta
-			c["x"] = clampf(np.x, 0.0, Simulation.BASE_SIZE.x)
-			c["y"] = clampf(np.y, 0.0, Simulation.BASE_SIZE.y)
+			c["x"] = clampf(np.x, 0.0, sim.size.x)
+			c["y"] = clampf(np.y, 0.0, sim.size.y)
 	_mark_dirty()
 	sim.set_tick(sim.tick)
 	view.refresh()
@@ -744,6 +861,21 @@ func _drag_to(p: Vector2) -> void:
 
 func _show_settings() -> void:
 	var body := UI.dialog(UI.root_of(ui), "Level settings", 640)
+	body.add_child(UI.label("Size", 20))
+	body.add_child(UI.label("The play area in pixels. Bigger levels start zoomed out so they fit on the screen.", 13, UI.MUTED, true))
+	var size_row := HBoxContainer.new()
+	size_row.add_theme_constant_override("separation", 10)
+	body.add_child(size_row)
+	for spec in [["width", "Width", Simulation.MIN_SIZE.x, Simulation.MAX_SIZE.x, sim.size.x],
+			["height", "Height", Simulation.MIN_SIZE.y, Simulation.MAX_SIZE.y, sim.size.y]]:
+		size_row.add_child(UI.label(spec[1], 16, UI.MUTED))
+		var spin := UI.spin(spec[2], spec[3], 10.0, spec[4], " px")
+		var key: String = spec[0]
+		spin.value_changed.connect(func(v):
+			level[key] = v
+			_size_changed())
+		size_row.add_child(spin)
+	body.add_child(UI.spacer(6))
 	body.add_child(UI.label("Background", 20))
 	var grid := GridContainer.new()
 	grid.columns = 3
@@ -815,3 +947,21 @@ func _on_back() -> void:
 		_save()
 	GameState.editor_level = {}
 	GameState.go(GameState.SCENE_SELECT)
+
+
+## The play area was resized: keep everything inside it and refit the view.
+func _size_changed() -> void:
+	sim.reset()
+	for c in level["cannons"]:
+		c["x"] = clampf(float(c["x"]), 0.0, sim.size.x)
+		c["y"] = clampf(float(c["y"]), 0.0, sim.size.y)
+	var f: Dictionary = level["finish"]
+	f["w"] = clampf(float(f.get("w", 60.0)), MIN_GATE, sim.size.x)
+	f["h"] = clampf(float(f.get("h", 400.0)), MIN_GATE, sim.size.y)
+	f["x"] = clampf(float(f.get("x", 0.0)), 0.0, sim.size.x - float(f["w"]))
+	f["y"] = clampf(float(f.get("y", 0.0)), 0.0, sim.size.y - float(f["h"]))
+	_mark_dirty()
+	view.rebuild()
+	_update_camera_limits()
+	camera.reset_view()
+	view.set_selection(selection, finish_selected)

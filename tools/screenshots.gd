@@ -22,7 +22,7 @@ func _ready() -> void:
 			{"x": 160.0, "y": 560.0, "angle": -45.0, "type": "normal", "behaviors": []},
 			{"x": 520.0, "y": 360.0, "angle": -60.0, "type": "normal", "behaviors": [{"type": "orbit", "radius": 110.0, "period": 4.0}]},
 			{"x": 640.0, "y": 420.0, "angle": -30.0, "type": "normal", "behaviors": [{"type": "move", "dir": "right", "range": 250.0, "period": 2.0}, {"type": "sweep", "from": -40.0, "to": 40.0, "period": 2.0}]},
-			{"x": 760.0, "y": 300.0, "angle": -90.0, "type": "normal", "behaviors": [{"type": "orbit", "radius": 80.0, "period": 3.0, "clockwise": false}]},
+			{"x": 760.0, "y": 300.0, "angle": -90.0, "type": "normal", "behaviors": [{"type": "path", "points": [[150.0, -120.0], [330.0, -60.0], [280.0, 120.0]], "period": 5.0, "smooth": true, "closed": true}]},
 			{"x": 900.0, "y": 500.0, "angle": 180.0, "type": "weak", "behaviors": [{"type": "rotate", "speed": 90.0}, {"type": "move", "dir": "up", "range": 200.0, "period": 3.0}]},
 		],
 		"finish": {"x": 1150.0, "y": 100.0, "w": 60.0, "h": 500.0}, "start": 0})
@@ -30,7 +30,9 @@ func _ready() -> void:
 		var scene: Node = (load(shot[1]) as PackedScene).instantiate()
 		get_tree().root.add_child(scene)
 		if shot[0] == "editor":
-			scene._set_selection([2])
+			scene._set_selection([3])
+			scene.path_edit = 0
+			scene._rebuild_inspector()
 		if shot[0] == "level":
 			# Let the ball fly a bit so the trail shows up.
 			for i in 30:

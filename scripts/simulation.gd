@@ -17,9 +17,25 @@ const GRAVITY := 1500.0
 const CATCH_RADIUS := 36.0           # distance at which a cannon sucks the player in
 const COOLDOWN_TICKS := 10           # ticks before the cannon that just fired can re-catch
 const DOUBLE_JUMP_VEL := -650.0
+## Default play area; a level can set its own "width" / "height".
 const BASE_SIZE := Vector2(1280, 720)
-## Leaving this rectangle kills the player (and resets the run).
+const MIN_SIZE := Vector2(640, 360)
+const MAX_SIZE := Vector2(3840, 2160)
+## Margins around the play area beyond which the player dies (lots of headroom above).
+const WORLD_MARGIN := Rect2(-80.0, -640.0, 160.0, 720.0)
+## The default world rect (kept for callers that have no level at hand).
 const WORLD := Rect2(-80.0, -640.0, 1440.0, 1440.0)
+
+
+static func level_size(level_data: Dictionary) -> Vector2:
+	var w := float(level_data.get("width", BASE_SIZE.x))
+	var h := float(level_data.get("height", BASE_SIZE.y))
+	return Vector2(clampf(w, MIN_SIZE.x, MAX_SIZE.x), clampf(h, MIN_SIZE.y, MAX_SIZE.y))
+
+
+static func world_rect(level_data: Dictionary) -> Rect2:
+	var s := level_size(level_data)
+	return Rect2(WORLD_MARGIN.position, s + WORLD_MARGIN.size)
 
 enum Mode { IN_CANNON, FLYING, FINISHED, DEAD }
 
@@ -67,10 +83,16 @@ const BEHAVIORS := {
 	"orbit": {"label": "Orbit", "params": [
 		["radius", "Radius px", 10.0, 600.0, 10.0, 120.0],
 		["period", "Period s", 0.2, 20.0, 0.1, 3.0]], "clockwise": true},
+	"path": {"label": "Path", "params": [
+		["period", "Period s", 0.2, 60.0, 0.1, 4.0]], "smooth": true, "closed": true,
+		"default_points": [[160.0, -90.0], [320.0, 0.0]]},
 }
-const BEHAVIOR_ORDER := ["rotate", "sweep", "move", "orbit"]
+const BEHAVIOR_ORDER := ["rotate", "sweep", "move", "orbit", "path"]
+const PATH_SAMPLES := 12   # spline samples per segment when a path is smoothed
 
 var level: Dictionary
+var size: Vector2 = BASE_SIZE   # play area of this level
+var world: Rect2 = WORLD        # death bounds of this level
 var cannons: Array            # references the level's cannon dictionaries (shared, not copied)
 var cannon_states: Array = [] # per cannon: {"pos": Vector2, "angle": float (deg)} for the current tick
 
@@ -135,7 +157,76 @@ static func cannon_state_at(c: Dictionary, t: int) -> Dictionary:
 				if not bool(b.get("clockwise", true)):
 					th = -th
 				p += Vector2(cos(th), sin(th)) * float(b.get("radius", 120.0))
+			"path":
+				var period: float = maxf(0.1, float(b.get("period", 4.0)))
+				var closed := bool(b.get("closed", true))
+				var u := fmod(time / period, 1.0)
+				if not closed:
+					# Ping-pong along an open path.
+					u = 1.0 - absf(2.0 * u - 1.0)
+				p += point_along(path_polyline(b), closed, u)
 	return {"pos": p, "angle": ang}
+
+
+## The points a path behaviour visits, relative to the cannon base, starting at the base.
+static func path_control_points(b: Dictionary) -> PackedVector2Array:
+	var pts := PackedVector2Array([Vector2.ZERO])
+	for raw in b.get("points", []):
+		if typeof(raw) == TYPE_ARRAY and raw.size() >= 2:
+			pts.append(Vector2(float(raw[0]), float(raw[1])))
+	return pts
+
+
+## The path as a dense polyline: the control points, or a Catmull-Rom spline through them.
+static func path_polyline(b: Dictionary) -> PackedVector2Array:
+	var pts := path_control_points(b)
+	if not bool(b.get("smooth", true)) or pts.size() < 3:
+		return pts
+	var closed := bool(b.get("closed", true))
+	var n := pts.size()
+	var out := PackedVector2Array()
+	var segments := n if closed else n - 1
+	for i in segments:
+		var p0 := pts[(i - 1 + n) % n] if closed else pts[maxi(i - 1, 0)]
+		var p1 := pts[i]
+		var p2 := pts[(i + 1) % n]
+		var p3 := pts[(i + 2) % n] if closed else pts[mini(i + 2, n - 1)]
+		for k in PATH_SAMPLES:
+			var t := float(k) / PATH_SAMPLES
+			out.append(_catmull_rom(p0, p1, p2, p3, t))
+	if not closed:
+		out.append(pts[n - 1])
+	return out
+
+
+static func _catmull_rom(p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, t: float) -> Vector2:
+	var t2 := t * t
+	var t3 := t2 * t
+	return 0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
+
+
+## Point at fraction [param u] (0..1) of the polyline's length, at constant speed.
+static func point_along(pts: PackedVector2Array, closed: bool, u: float) -> Vector2:
+	var n := pts.size()
+	if n == 0:
+		return Vector2.ZERO
+	if n == 1:
+		return pts[0]
+	var segs := n if closed else n - 1
+	var total := 0.0
+	for i in segs:
+		total += pts[i].distance_to(pts[(i + 1) % n])
+	if total <= 0.0:
+		return pts[0]
+	var d := clampf(u, 0.0, 1.0) * total
+	for i in segs:
+		var a := pts[i]
+		var c := pts[(i + 1) % n]
+		var len := a.distance_to(c)
+		if d <= len or i == segs - 1:
+			return a.lerp(c, d / len if len > 0.0 else 0.0)
+		d -= len
+	return pts[0]
 
 
 ## Length in ticks after which a cannon's motion repeats (0 = static).
@@ -147,7 +238,7 @@ static func cannon_cycle_ticks(c: Dictionary) -> int:
 			"rotate":
 				var speed := absf(float(b.get("speed", 90.0)))
 				period = 360.0 / speed if speed > 0.0 else 0.0
-			"sweep", "move", "orbit":
+			"sweep", "move", "orbit", "path":
 				period = maxf(0.1, float(b.get("period", 2.0)))
 		cycle = maxf(cycle, period)
 	return int(ceil(cycle * TICK_RATE))
@@ -175,6 +266,8 @@ func finish_rect() -> Rect2:
 
 
 func reset() -> void:
+	size = level_size(level)
+	world = world_rect(level)
 	tick = 0
 	run_start_tick = -1
 	mode = Mode.IN_CANNON
@@ -290,7 +383,7 @@ func _check_finish() -> void:
 
 
 func _check_death() -> void:
-	if not WORLD.has_point(pos):
+	if not world.has_point(pos):
 		mode = Mode.DEAD
 		events.append("die")
 

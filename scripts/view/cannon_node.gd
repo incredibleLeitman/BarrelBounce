@@ -140,3 +140,17 @@ func _draw_hints() -> void:
 				draw_arc(Vector2.ZERO, 62.0, minf(a0, a1), maxf(a0, a1), 24, hint, w + 1.0)
 			"rotate":
 				draw_arc(Vector2.ZERO, 62.0, 0.0, TAU, 48, Color(hint, hint.a * 0.6), w - 0.5)
+			"path":
+				var line := Simulation.path_polyline(b)
+				var closed := bool(b.get("closed", true))
+				for i in range(1, line.size()):
+					draw_line(base + line[i - 1], base + line[i], hint, w)
+				if closed and line.size() > 1:
+					draw_line(base + line[line.size() - 1], base + line[0], hint, w)
+				# Control point handles, bigger when selected so they can be grabbed.
+				var ctrl := Simulation.path_control_points(b)
+				for i in range(1, ctrl.size()):
+					draw_circle(base + ctrl[i], 7.0 if selected else 4.0, hint)
+					if selected:
+						draw_circle(base + ctrl[i], 4.0, Color("#1b2138"))
+				draw_circle(base, 4.0, hint)

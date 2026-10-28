@@ -11,6 +11,8 @@ const ZOOM_STEP := 1.12
 
 ## Screen-space rectangle the camera may not leave (set by the owner, usually the world bounds).
 var limit_rect := Rect2()
+## Furthest zoom-out allowed; lowered by the owner for levels larger than the screen.
+var zoom_min := ZOOM_MIN
 var touches: Dictionary = {}       # finger index -> screen position
 var pinch_last_dist := 0.0
 
@@ -71,7 +73,7 @@ func pan_by(screen_delta: Vector2) -> void:
 ## Zooms around a screen point so what is under the finger / cursor stays put.
 func zoom_by(factor: float, screen_point: Vector2) -> void:
 	var old_zoom := zoom.x
-	var new_zoom := clampf(old_zoom * factor, ZOOM_MIN, ZOOM_MAX)
+	var new_zoom := clampf(old_zoom * factor, zoom_min, ZOOM_MAX)
 	if is_equal_approx(new_zoom, old_zoom):
 		return
 	var vp_center := get_viewport_rect().size * 0.5
