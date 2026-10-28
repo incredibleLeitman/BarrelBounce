@@ -76,7 +76,9 @@ tap. The editor locks the type of the start cannon and loading a level enforces 
 Every behaviour is either **together** (`"seq": false`, the default: it runs all the time and
 its offset is added to the others) or a **step** (`"seq": true` with a `duration` in
 seconds). Steps run one after another in list order, each starting from the position and
-angle the previous step ended at, and the sequence loops. Continuous behaviours keep running
+angle the previous step ended at, and the sequence repeats: `"seq_mode": "loop"` (default)
+restarts from step 1, `"pingpong"` plays the steps forwards and then backwards so the cannon
+never jumps. Continuous behaviours keep running
 underneath. In the editor the icon on each movement block flips it between the two; steps are
 numbered and show their duration, blocks that run together share a bracket, and *Preview*
 highlights the step that is playing.

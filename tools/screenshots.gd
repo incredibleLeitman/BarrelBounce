@@ -33,6 +33,10 @@ func _ready() -> void:
 	for shot in SHOTS:
 		var scene: Node = (load(shot[1]) as PackedScene).instantiate()
 		get_tree().root.add_child(scene)
+		if shot[0] == "main_menu":
+			# Catch the demo ball mid-flight, above the title.
+			for i in 130:
+				scene._physics_process(1.0 / 60.0)
 		if shot[0] == "editor":
 			scene._set_selection([3])
 			scene._toggle_preview()

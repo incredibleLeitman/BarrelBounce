@@ -155,7 +155,7 @@ static func cannon_state_at(c: Dictionary, t: int) -> Dictionary:
 		for b in steps:
 			total += step_duration(b)
 		if total > 0.0:
-			var local := fmod(time, total)
+			var local := sequence_time(c, time, total)
 			for b in steps:
 				var dur := step_duration(b)
 				var off: Dictionary
@@ -205,6 +205,15 @@ static func behavior_offset(b: Dictionary, time: float) -> Dictionary:
 	return {"pos": p, "angle": ang}
 
 
+## Where in its sequence a cannon is at [param time]: 0..total. A "loop" sequence restarts
+## from the beginning; a "pingpong" one plays forwards, then backwards, so it never jumps.
+static func sequence_time(c: Dictionary, time: float, total: float) -> float:
+	if str(c.get("seq_mode", "loop")) == "pingpong":
+		var local := fmod(time, total * 2.0)
+		return local if local <= total else total * 2.0 - local
+	return fmod(time, total)
+
+
 ## How long a sequential step plays, in seconds.
 static func step_duration(b: Dictionary) -> float:
 	return maxf(0.0, float(b.get("duration", default_duration(b))))
@@ -249,7 +258,7 @@ static func active_step(c: Dictionary, t: int) -> int:
 			total += step_duration(b)
 	if total <= 0.0:
 		return -1
-	var local := fmod(t * DT, total)
+	var local := sequence_time(c, t * DT, total)
 	for i in bs.size():
 		if not bool(bs[i].get("seq", false)):
 			continue
@@ -337,6 +346,8 @@ static func cannon_cycle_ticks(c: Dictionary) -> int:
 			"sweep", "move", "orbit", "path":
 				period = maxf(0.1, float(b.get("period", 2.0)))
 		cycle = maxf(cycle, period)
+	if str(c.get("seq_mode", "loop")) == "pingpong":
+		seq_total *= 2.0
 	cycle = maxf(cycle, seq_total)
 	return int(ceil(cycle * TICK_RATE))
 

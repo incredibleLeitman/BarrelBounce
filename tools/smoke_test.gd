@@ -296,3 +296,16 @@ func _test_sequences() -> void:
 	check(is_equal_approx(float(Simulation.cannon_state_at(c, 60)["angle"]), 90.0), "together behaviours are summed on top of the steps")
 	check(Simulation.cannon_cycle_ticks(c) == 240, "cycle covers the sequence and the rotation")
 	check(Simulation.default_duration({"type": "move", "period": 3.0}) == 1.5, "move steps default to one way")
+	# Back-and-forth sequences play the steps in reverse after the last one.
+	var pp := {"x": 500.0, "y": 300.0, "angle": 0.0, "seq_mode": "pingpong", "behaviors": [
+		{"type": "move", "dir": "left", "range": 150.0, "period": 2.0, "seq": true, "duration": 1.0},
+		{"type": "move", "dir": "up", "range": 100.0, "period": 2.0, "seq": true, "duration": 1.0},
+	]}
+	var e1: Vector2 = Simulation.cannon_state_at(pp, 120)["pos"]
+	var e2: Vector2 = Simulation.cannon_state_at(pp, 180)["pos"]
+	var e3: Vector2 = Simulation.cannon_state_at(pp, 240)["pos"]
+	check(is_equal_approx(e1.x, 350.0) and is_equal_approx(e1.y, 200.0), "end of a pingpong pass is the far corner")
+	check(is_equal_approx(e2.x, 350.0) and is_equal_approx(e2.y, 300.0), "then it plays step 2 backwards")
+	check(is_equal_approx(e3.x, 500.0) and is_equal_approx(e3.y, 300.0), "and step 1 backwards to the base")
+	check(Simulation.active_step(pp, 150) == 1 and Simulation.active_step(pp, 210) == 0, "active step follows the reverse pass")
+	check(Simulation.cannon_cycle_ticks(pp) == 240, "pingpong cycle is twice the sequence")

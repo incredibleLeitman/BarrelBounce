@@ -1,21 +1,45 @@
 extends Node2D
 ## Main menu: Start (-> level select), Level editor, Player settings, How to play, Exit.
-## A little demo level plays itself in the background so the menu is never static.
+## A self-playing demo sits left of the buttons and lobs the ball over the title into a gate on
+## the right. The demo is drawn on a layer above the UI so the ball is never hidden by it; the
+## backdrop stays below the UI.
+
+## Not a playable level, so it may use a Big Bertha as its start cannon: a plain cannon could
+## not throw the ball across the whole menu.
+const DEMO_LEVEL := {
+	"id": "menu_demo", "name": "Menu", "author": "BarrelBounce", "background": "space",
+	"cannons": [{"x": 170.0, "y": 560.0, "angle": -64.0, "type": "strong", "behaviors": []}],
+	"finish": {"x": 1010.0, "y": 150.0, "w": 60.0, "h": 480.0},
+	"start": 0,
+}
 
 var view: LevelView
 var sim: Simulation
+var backdrop: Backdrop
 var demo_timer := 0.0
 var ui: CanvasLayer
 
 
 func _ready() -> void:
-	var level: Dictionary = GameState.builtin_levels()[0]
-	sim = Simulation.new(level)
-	view = LevelView.new()
-	add_child(view)
-	view.bind(sim)
-	view.modulate = Color(1, 1, 1, 0.55)
+	sim = Simulation.new(DEMO_LEVEL.duplicate(true))
+	# Backdrop below the UI, in the same place the demo view will be.
+	backdrop = Backdrop.new()
+	add_child(backdrop)
+	_place_backdrop()
+	get_viewport().size_changed.connect(_place_backdrop)
 	_build_ui()
+	# The demo itself above the UI.
+	var demo_layer := CanvasLayer.new()
+	demo_layer.layer = 2
+	add_child(demo_layer)
+	view = LevelView.new()
+	demo_layer.add_child(view)
+	view.bind(sim)
+	view.backdrop.visible = false
+
+
+func _place_backdrop() -> void:
+	backdrop.position = ((get_viewport_rect().size - Simulation.BASE_SIZE) * 0.5).floor()
 
 
 func _build_ui() -> void:
@@ -73,13 +97,13 @@ func _build_ui() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	# Self-playing demo: fire whenever the ball has been sitting for a moment.
+	# Self-playing demo: fire after a short pause, rest a moment after each landing.
 	demo_timer += delta
 	var fire := false
-	if sim.mode == Simulation.Mode.IN_CANNON and sim.ticks_in_cannon > 50:
+	if sim.mode == Simulation.Mode.IN_CANNON and sim.ticks_in_cannon > 70:
 		fire = true
 	if sim.mode == Simulation.Mode.DEAD or sim.mode == Simulation.Mode.FINISHED:
-		if demo_timer > 1.0:
+		if demo_timer > 1.2:
 			sim.reset()
 			view.player_node.clear_trail()
 			demo_timer = 0.0

@@ -353,9 +353,25 @@ func _build_cannon_inspector() -> void:
 	# Behaviours
 	inspector_box.add_child(UI.spacer(6))
 	var bh := HBoxContainer.new()
+	bh.add_theme_constant_override("separation", 8)
 	inspector_box.add_child(bh)
 	bh.add_child(UI.label("Movement", 20))
 	bh.add_child(UI.hspacer_expand())
+	# Sequence mode, shown once the cannon has at least one step.
+	var has_step := false
+	for c in cannons:
+		for blk in c["behaviors"]:
+			if bool(blk.get("seq", false)):
+				has_step = true
+	if has_step:
+		var pingpong := str(cannons[0].get("seq_mode", "loop")) == "pingpong"
+		var mode_btn := UI.small_button("  Back & forth  " if pingpong else "  Loop  ")
+		mode_btn.tooltip_text = "How the sequence repeats: restart from step 1, or play it forwards and then backwards"
+		mode_btn.pressed.connect(func():
+			for c in cannons:
+				c["seq_mode"] = "loop" if pingpong else "pingpong"
+			_structure_changed())
+		bh.add_child(mode_btn)
 	var add_opt := OptionButton.new()
 	add_opt.custom_minimum_size.y = 40
 	add_opt.add_item("+ Add…", 0)
