@@ -113,12 +113,23 @@ static func icon_button(text: String, icon_name: String, min_height: float = 44.
 
 
 ## Modal dialog with a title, a message and Yes / No buttons. [param on_yes] runs on confirm.
-static func confirm(parent: Control, title_text: String, message: String, yes_text: String, on_yes: Callable) -> void:
+## Full-screen shade on a layer above everything else; freeing it closes the dialog.
+static func _shade(parent: Control) -> ColorRect:
+	var layer := CanvasLayer.new()
+	layer.layer = 100
+	parent.get_tree().root.add_child(layer)
 	var shade := ColorRect.new()
 	shade.color = Color(0, 0, 0, 0.55)
 	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	shade.mouse_filter = Control.MOUSE_FILTER_STOP
-	parent.add_child(shade)
+	shade.theme = theme()
+	shade.tree_exited.connect(layer.queue_free)
+	layer.add_child(shade)
+	return shade
+
+
+static func confirm(parent: Control, title_text: String, message: String, yes_text: String, on_yes: Callable) -> void:
+	var shade := _shade(parent)
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -152,11 +163,7 @@ static func confirm(parent: Control, title_text: String, message: String, yes_te
 
 ## Modal panel with a close button; returns the VBox to fill with content.
 static func dialog(parent: Control, title_text: String, width: float = 720.0) -> VBoxContainer:
-	var shade := ColorRect.new()
-	shade.color = Color(0, 0, 0, 0.55)
-	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	shade.mouse_filter = Control.MOUSE_FILTER_STOP
-	parent.add_child(shade)
+	var shade := _shade(parent)
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH

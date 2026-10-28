@@ -83,6 +83,12 @@ func _build_ui() -> void:
 		grid.add_child(b)
 		swatches.append(b)
 
+	var ghost := CheckButton.new()
+	ghost.text = "Show the ghost of the best run while playing"
+	ghost.button_pressed = GameState.ghost_enabled()
+	ghost.add_theme_font_size_override("font_size", 18)
+	ghost.toggled.connect(func(on): GameState.set_ghost_enabled(on))
+	box.add_child(ghost)
 	box.add_child(UI.spacer(8))
 	var done := UI.accent_button("Done")
 	done.pressed.connect(_save_and_leave)

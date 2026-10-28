@@ -8,6 +8,8 @@ const SHOTS := [
 	["level", "res://scenes/level.tscn"],
 	["editor", "res://scenes/editor.tscn"],
 	["settings", "res://scenes/settings.tscn"],
+	["help", "res://scenes/main_menu.tscn"],
+	["help2", "res://scenes/main_menu.tscn"],
 ]
 
 
@@ -33,6 +35,12 @@ func _ready() -> void:
 	for shot in SHOTS:
 		var scene: Node = (load(shot[1]) as PackedScene).instantiate()
 		get_tree().root.add_child(scene)
+		if shot[0] == "help" or shot[0] == "help2":
+			var body := HelpDialog.show(UI.root_of(scene.ui))
+			if shot[0] == "help2":
+				await get_tree().process_frame
+				await get_tree().process_frame
+				(body.get_parent() as ScrollContainer).scroll_vertical = 1100
 		if shot[0] == "main_menu":
 			# Catch the demo ball mid-flight, above the title.
 			for i in 130:

@@ -215,11 +215,12 @@ func _show_import() -> void:
 			status.text = "That is not a valid level code, or its proof run does not finish the level."
 			return
 		if GameState.save_user_level(level):
-			# Close the dialog (its shade is the dialog's top-most ancestor under the UI root).
-			var shade := body
-			while shade.get_parent() != root:
+			# Close the dialog: its shade is the ColorRect ancestor of the body.
+			var shade: Node = body
+			while shade and not (shade is ColorRect):
 				shade = shade.get_parent()
-			shade.queue_free()
+			if shade:
+				shade.queue_free()
 			tab = Tab.MINE
 			_refresh()
 			UI.toast(root, "Imported “%s” by %s" % [str(level.get("name", "")), str(level.get("author", "?"))], UI.GOOD)

@@ -149,6 +149,17 @@ func player_color() -> Color:
 	return Color(str(profile.get("color", PLAYER_COLORS[0])))
 
 
+func ghost_enabled() -> bool:
+	return bool(profile.get("ghost", true))
+
+
+func set_ghost_enabled(on: bool) -> void:
+	profile["ghost"] = on
+	var f := FileAccess.open(PROFILE_PATH, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify(profile))
+
+
 func random_name() -> String:
 	return "%s %s" % [NAME_ADJECTIVES[randi() % NAME_ADJECTIVES.size()], NAME_NOUNS[randi() % NAME_NOUNS.size()]]
 

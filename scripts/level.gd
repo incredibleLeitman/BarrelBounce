@@ -13,6 +13,7 @@ var taps: Array = []            # ticks the button was pressed on in the current
 var ghost: Simulation           # replay of the best run, stepped in lockstep with sim
 var ghost_taps: Dictionary = {}
 var ghost_first_tap := 0        # absolute tick of the best run's first launch
+var ghost_owner := ""           # "your best" or "<player>'s run", for the HUD
 var ghost_armed := false        # true once the player fired and the ghost race is on
 var pending_fire := false
 var death_timer := 0.0
@@ -22,6 +23,7 @@ var camera: CameraRig
 var dragging := false
 
 var ui: CanvasLayer
+var ghost_button: Button
 var time_label: Label
 var best_label: Label
 var hint_label: Label
@@ -102,6 +104,15 @@ func _build_ui() -> void:
 	var help := UI.icon_button("", "help")
 	help.pressed.connect(func(): HelpDialog.show(root))
 	top.add_child(help)
+	ghost_button = UI.small_button("  Ghost  ")
+	ghost_button.toggle_mode = true
+	ghost_button.button_pressed = GameState.ghost_enabled()
+	ghost_button.tooltip_text = "Show the ghost of the best run"
+	ghost_button.toggled.connect(func(on):
+		GameState.set_ghost_enabled(on)
+		_load_ghost()
+		_update_best())
+	top.add_child(ghost_button)
 	var restart := UI.small_button("  Reset  ")
 	restart.pressed.connect(_restart)
 	top.add_child(restart)
@@ -150,19 +161,31 @@ func _build_ui() -> void:
 func _update_best() -> void:
 	var id := str(level.get("id", ""))
 	var best := GameState.best_ticks(id, rev)
+	var ghost_text := ""
+	if ghost != null:
+		ghost_text = "  ·  ghost: " + ghost_owner
+	elif GameState.ghost_enabled() and GameState.is_verified(level) and best < 0:
+		ghost_text = ""
 	if best >= 0:
-		best_label.text = "best " + Simulation.format_ticks(best) + "  ·  ghost on"
+		best_label.text = "best " + Simulation.format_ticks(best) + ghost_text
+	elif ghost != null:
+		best_label.text = Simulation.format_ticks(int(level["verified"]["ticks"])) + " by " + str(level["verified"].get("player", "author")) + ghost_text
 	elif GameState.best_is_stale(id, rev):
 		best_label.text = "level changed: best time reset"
 	else:
 		best_label.text = "no time yet"
 
 
-## The ghost replays the taps of the best run for this revision, from tick 0.
+## The ghost replays the best run of this revision: your own, or, until you have one, the
+## author's proof run that came with a shared level.
 func _load_ghost() -> void:
 	var entry := GameState.best_entry(str(level.get("id", "")), rev)
+	ghost_owner = "your best"
+	if entry.is_empty() and GameState.is_verified(level):
+		entry = level["verified"]
+		ghost_owner = str(entry.get("player", "author")) + "'s run"
 	ghost_taps.clear()
-	if entry.is_empty() or entry.get("taps", []).is_empty():
+	if not GameState.ghost_enabled() or entry.is_empty() or entry.get("taps", []).is_empty():
 		ghost = null
 		view.bind_ghost(null)
 		return

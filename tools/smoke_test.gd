@@ -15,7 +15,7 @@ func _ready() -> void:
 	_test_level_codes()
 	_test_paths_and_size()
 	_test_sequences()
-	_test_ghost_and_fairness()
+	await _test_ghost_and_fairness()
 	print("SMOKE TEST " + ("PASSED" if failures == 0 else "FAILED (%d)" % failures))
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -354,6 +354,7 @@ func _test_sequences() -> void:
 
 
 func _test_ghost_and_fairness() -> void:
+	await get_tree().process_frame
 	print("ghost replay, revisions, shareable only when verified")
 	var level: Dictionary = GameState.builtin_levels()[1]
 	var rev := GameState.level_hash(level)
@@ -387,5 +388,16 @@ func _test_ghost_and_fairness() -> void:
 	var tampered: Dictionary = mine.duplicate(true)
 	tampered["verified"]["ticks"] = 1
 	check(GameState.level_from_code(GameState.level_to_code(tampered)).is_empty(), "a code whose proof time was tampered with is rejected")
+	# The author's proof run is the receiver's ghost until they have a best of their own.
+	GameState.current_level = imported
+	var scene := await _swap_scene(GameState.SCENE_LEVEL)
+	check(scene.ghost != null and scene.ghost_owner.ends_with("'s run"), "imported level uses the author's run as ghost: %s" % scene.ghost_owner)
+	GameState.set_ghost_enabled(false)
+	scene._load_ghost()
+	check(scene.ghost == null, "ghost can be switched off")
+	GameState.set_ghost_enabled(true)
+	scene.queue_free()
+	await get_tree().process_frame
 	GameState.delete_user_level(mine["id"])
+	GameState.delete_user_level(imported["id"])
 	GameState.scores.erase(mine["id"])
