@@ -62,6 +62,8 @@ jobs:
           GODOT=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
           $GODOT --headless res://tools/smoke_test.tscn
           $GODOT --headless -s tools/solve_levels.gd -- 60
+          $GODOT --headless -s tools/verify_runs.gd -- tools/fixtures/pending.json /tmp/results.json
+          grep -q '"verified"' /tmp/results.json
 
       - uses: actions/upload-pages-artifact@v3
         with:

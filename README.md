@@ -117,6 +117,15 @@ after you finished its current revision, the code carries that run, and importin
 it and rejects codes whose proof does not finish. The same replay check is what a server
 leaderboard would do.
 
+### Online leaderboards and community levels
+
+`server/` holds a one-file PHP API with a MySQL schema (see `server/README.md` for the
+all-inkl setup). With `API_URL` set in `scripts/online.gd`, a new personal best is posted
+as a *pending* run, your levels get a *Publish* button, and the *Community* tab lists
+published levels. Nothing is ranked until `.github/workflows/verify.yml` has replayed it
+with the game's own simulation (`tools/verify_runs.gd`), every 30 minutes. With `API_URL`
+empty the game is fully offline.
+
 ### Player profile
 
 *Player* on the main menu lets you pick a ball colour and roll a random name. It is stored

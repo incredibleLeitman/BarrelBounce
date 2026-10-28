@@ -3,6 +3,8 @@
 *.import
 export/
 *.tmp
+# Server credentials
+server/config.php
 # Local export credentials
 export_presets.cfg.secret
 # OS / editor

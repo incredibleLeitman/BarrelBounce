@@ -16,6 +16,7 @@ func _ready() -> void:
 	_test_paths_and_size()
 	_test_sequences()
 	await _test_ghost_and_fairness()
+	_test_online_offline()
 	print("SMOKE TEST " + ("PASSED" if failures == 0 else "FAILED (%d)" % failures))
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -413,3 +414,17 @@ func _test_ghost_and_fairness() -> void:
 	GameState.delete_user_level(mine["id"])
 	GameState.delete_user_level(imported["id"])
 	GameState.scores.erase(mine["id"])
+
+
+
+func _test_online_offline() -> void:
+	print("online client (offline build) and shared check code")
+	var level: Dictionary = GameState.builtin_levels()[1]
+	check(LevelCheck.level_hash(level) == GameState.level_hash(level), "LevelCheck hash equals GameState hash")
+	check(LevelCheck.verify_run(level, [1, 28]) == 65, "LevelCheck replays the known Catch Me solution")
+	check(not Online.enabled(), "online is off when API_URL is empty")
+	var got := {}
+	Online.submit_run(level, "x", 1, [1], func(ok: bool, data: Dictionary):
+		got["ok"] = ok
+		got["err"] = data.get("error", ""))
+	check(got.get("ok") == false and got.get("err") == "offline", "offline client calls back immediately with an error")

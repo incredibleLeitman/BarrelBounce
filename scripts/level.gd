@@ -29,6 +29,7 @@ var flash: ColorRect
 var win_panel: PanelContainer
 var win_time: Label
 var win_best: Label
+var board_box: VBoxContainer
 var next_button: Button
 
 
@@ -144,6 +145,10 @@ func _build_ui() -> void:
 	win_best = UI.label("", 18, UI.MUTED)
 	win_best.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(win_best)
+	board_box = VBoxContainer.new()
+	board_box.add_theme_constant_override("separation", 2)
+	board_box.visible = false
+	box.add_child(board_box)
 	box.add_child(UI.spacer(8))
 	var again := UI.accent_button("Play again")
 	again.pressed.connect(_restart)
@@ -334,6 +339,7 @@ func _on_finish() -> void:
 	if new_best:
 		_load_ghost()
 	_update_best()
+	_online_after_finish(new_best, ticks)
 	var idx := GameState.builtin_index(id)
 	next_button.visible = idx >= 0 and idx + 1 < BuiltinLevels.LEVELS.size()
 	win_panel.visible = true
@@ -341,6 +347,43 @@ func _on_finish() -> void:
 	win_panel.pivot_offset = win_panel.size / 2.0
 	var tw := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(win_panel, "scale", Vector2.ONE, 0.35)
+
+
+## Posts a new best to the leaderboard and shows the world ranking in the win panel.
+func _online_after_finish(new_best: bool, ticks: int) -> void:
+	for c in board_box.get_children():
+		c.queue_free()
+	board_box.visible = Online.enabled()
+	if not Online.enabled():
+		return
+	var id := str(level.get("id", ""))
+	var publishable := id.begins_with("builtin_") or str(level.get("online_id", "")) != ""
+	if not publishable:
+		board_box.add_child(UI.label("Publish this level to get a world ranking.", 14, UI.MUTED))
+		return
+	board_box.add_child(UI.label("World ranking: loading…", 14, UI.MUTED))
+	var show_board := func():
+		Online.leaderboard(id, rev, func(ok: bool, data: Dictionary):
+			if not is_instance_valid(board_box):
+				return
+			for c in board_box.get_children():
+				c.queue_free()
+			if not ok:
+				board_box.add_child(UI.label("World ranking unavailable (%s)" % str(data.get("error", "offline")), 14, UI.MUTED))
+				return
+			var rows: Array = data.get("rows", [])
+			board_box.add_child(UI.label("World ranking" if not rows.is_empty() else "No verified runs yet. Yours is being verified.", 15, UI.MUTED))
+			for r in rows.slice(0, 5):
+				var mine := str(r.get("player_id", "")) == GameState.player_id()
+				var line := "%d.  %s   %s" % [int(r.get("rank", 0)), GameState.display_name(str(r.get("player_name", "?")), str(r.get("player_id", ""))), Simulation.format_ticks(int(r.get("ticks", 0)))]
+				board_box.add_child(UI.label(line, 15, UI.ACCENT if mine else UI.TEXT))
+			var me = data.get("mine")
+			if typeof(me) == TYPE_DICTIONARY and str(me.get("status", "")) == "pending":
+				board_box.add_child(UI.label("Your %s run is waiting for verification." % Simulation.format_ticks(int(me.get("ticks", 0))), 13, UI.MUTED)))
+	if new_best:
+		Online.submit_run(level, rev, ticks, taps, func(_ok: bool, _data: Dictionary): show_board.call())
+	else:
+		show_board.call()
 
 
 func _next_level() -> void:

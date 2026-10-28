@@ -212,32 +212,14 @@ func _load_profile() -> void:
 ## Hash of everything that affects play (not the name, author or background). A best time
 ## belongs to one revision: edit the level and the old times no longer count.
 func level_hash(level: Dictionary) -> String:
-	var core := {
-		"cannons": level.get("cannons", []), "finish": level.get("finish", {}),
-		"start": level.get("start", 0), "width": level.get("width", Simulation.BASE_SIZE.x),
-		"height": level.get("height", Simulation.BASE_SIZE.y),
-	}
-	# Round-trip through JSON first so ints and floats (0 vs 0.0) hash the same whether the
-	# level came from code, from a file or from a code string.
-	var canonical = JSON.parse_string(JSON.stringify(core))
-	return JSON.stringify(canonical).md5_text().substr(0, 16)
+	return LevelCheck.level_hash(level)
 
 
 ## Replays [param taps] (absolute ticks) on a copy of the level. Returns the finish time in
 ## ticks, or -1 when the run does not finish. This is the proof check used for shared levels
 ## and the basis for server-side leaderboard verification.
 func verify_run(level: Dictionary, taps: Array, max_ticks: int = 36000) -> int:
-	var sim := Simulation.new(normalize_level(level.duplicate(true)))
-	var tap_set := {}
-	for t in taps:
-		tap_set[int(t)] = true
-	while sim.tick < max_ticks:
-		sim.step(tap_set.has(sim.tick + 1))
-		if sim.mode == Simulation.Mode.FINISHED:
-			return sim.finish_ticks
-		if sim.mode == Simulation.Mode.DEAD:
-			return -1
-	return -1
+	return LevelCheck.verify_run(normalize_level(level.duplicate(true)), taps, max_ticks)
 
 
 ## True when the level carries a proof run that matches its current revision.

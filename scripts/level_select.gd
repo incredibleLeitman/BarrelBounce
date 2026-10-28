@@ -92,7 +92,10 @@ func _refresh() -> void:
 			for l in GameState.builtin_levels():
 				_add_row(l, false)
 		Tab.COMMUNITY:
-			_empty_message("Community & friends levels are coming later.\nYour levels are plain JSON files – share them in the meantime!")
+			if not Online.enabled():
+				_empty_message("Online play is not set up in this build.\nShare levels as codes in the meantime!")
+			else:
+				_load_community()
 
 
 func _empty_message(text: String) -> void:
@@ -138,6 +141,14 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 	if not creator.is_empty() and not creator_is_me:
 		meta_row.add_child(UI.label("  ·  %s: %s" % [str(creator.get("player", "creator")), Simulation.format_ticks(int(creator["ticks"]))], 16, UI.MUTED))
 
+	if editable and Online.enabled():
+		var publish := UI.small_button("  Publish  ")
+		if GameState.can_share(level):
+			publish.pressed.connect(func(): _publish(level))
+		else:
+			publish.disabled = true
+			publish.tooltip_text = "Finish this version of the level once, then you can publish it."
+		row.add_child(publish)
 	if editable:
 		var share := UI.small_button("  Share  ")
 		if GameState.can_share(level):
@@ -234,3 +245,74 @@ func _show_import() -> void:
 			status.text = "Could not save the level.")
 	row.add_child(do_import)
 	body.add_child(status)
+
+
+# ---------------------------------------------------------------- online
+
+func _publish(level: Dictionary) -> void:
+	var root := UI.root_of(ui)
+	var payload: Dictionary = level.duplicate(true)
+	payload["verified"] = GameState.proof_for(level)
+	UI.toast(root, "Publishing “%s”…" % str(level.get("name", "")), UI.ACCENT_2)
+	Online.publish_level(payload, func(ok: bool, data: Dictionary):
+		if not is_instance_valid(root):
+			return
+		if ok:
+			level["online_id"] = str(level["id"])
+			GameState.save_user_level(level)
+			UI.toast(root, "Published. It appears under Community once verified.", UI.GOOD)
+		else:
+			UI.toast(root, "Publish failed: %s" % str(data.get("error", "offline")), UI.BAD))
+
+
+func _load_community() -> void:
+	var loading := UI.label("Loading community levels…", 20, UI.MUTED)
+	loading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	loading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_child(loading)
+	Online.list_levels(0, func(ok: bool, data: Dictionary):
+		if not is_instance_valid(list) or tab != Tab.COMMUNITY:
+			return
+		for c in list.get_children():
+			c.queue_free()
+		if not ok:
+			_empty_message("Could not reach the server (%s)." % str(data.get("error", "offline")))
+			return
+		var rows: Array = data.get("rows", [])
+		if rows.is_empty():
+			_empty_message("No community levels yet. Publish one of yours!")
+		for r in rows:
+			_add_community_row(r))
+
+
+func _add_community_row(r: Dictionary) -> void:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_child(panel)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	panel.add_child(row)
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(info)
+	info.add_child(UI.label(str(r.get("name", "Untitled")), 26))
+	var author := GameState.display_name(str(r.get("author_name", "?")), str(r.get("author_id", "")))
+	info.add_child(UI.label("by %s  ·  %s  ·  %d plays" % [author, Simulation.format_ticks(int(r.get("proof_ticks", 0))), int(r.get("plays", 0))], 16, UI.MUTED))
+	var play := UI.accent_button("  Play  ", 48, 20)
+	var id := str(r.get("id", ""))
+	play.pressed.connect(func():
+		play.disabled = true
+		play.text = "  …  "
+		Online.fetch_level(id, func(ok: bool, data: Dictionary):
+			if not ok or typeof(data.get("level")) != TYPE_DICTIONARY:
+				if is_instance_valid(play):
+					play.disabled = false
+					play.text = "  Play  "
+				UI.toast(UI.root_of(ui), "Could not download the level.", UI.BAD)
+				return
+			var level: Dictionary = GameState.normalize_level(data["level"])
+			level["id"] = id
+			level["online_id"] = id
+			GameState.play_level(level)))
+	row.add_child(play)

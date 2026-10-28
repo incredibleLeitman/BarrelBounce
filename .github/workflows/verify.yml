@@ -1,0 +1,93 @@
+name: Verify online runs
+
+# Replays pending leaderboard runs and published levels with the game's own simulation
+# (headless Godot) and marks them verified or rejected on the server.
+# Needs two repository secrets: API_URL (https://.../api.php) and ADMIN_KEY (as in config.php).
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify
+  cancel-in-progress: false
+
+env:
+  GODOT_VERSION: 4.7.2
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip when the API is not configured
+        id: cfg
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+        run: |
+          if [ -z "$API_URL" ] || [ -z "$ADMIN_KEY" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "API_URL / ADMIN_KEY secrets are not set; nothing to do."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch pending rows
+        if: steps.cfg.outputs.configured == 'true'
+        id: fetch
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+        run: |
+          set -e
+          curl -sS --fail -G "$API_URL" --data-urlencode "action=pending" --data-urlencode "key=$ADMIN_KEY" -o pending.json
+          COUNT=$(python3 -c "import json;d=json.load(open('pending.json'));print(len(d.get('runs',[]))+len(d.get('levels',[])))")
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "$COUNT pending row(s)"
+
+      - name: Cache Godot
+        if: steps.cfg.outputs.configured == 'true' && steps.fetch.outputs.count != '0'
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-bin
+
+      - name: Download Godot
+        if: steps.cfg.outputs.configured == 'true' && steps.fetch.outputs.count != '0' && steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          mkdir -p ~/godot && cd ~/godot
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -o -q godot.zip && rm godot.zip
+
+      - name: Replay with the game's simulation
+        if: steps.cfg.outputs.configured == 'true' && steps.fetch.outputs.count != '0'
+        run: |
+          set -e
+          GODOT=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
+          $GODOT --headless --import > /dev/null 2>&1 || true
+          $GODOT --headless -s tools/verify_runs.gd -- pending.json results.json
+
+      - name: Report verdicts
+        if: steps.cfg.outputs.configured == 'true' && steps.fetch.outputs.count != '0'
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+        run: |
+          set -e
+          python3 - <<'EOF'
+          import json, os
+          r = json.load(open('results.json'))
+          r['key'] = os.environ['ADMIN_KEY']
+          json.dump(r, open('resolve.json', 'w'))
+          EOF
+          SEP='?'; case "$API_URL" in *\?*) SEP='&';; esac
+          curl -sS --fail -X POST "${API_URL}${SEP}action=resolve" -H "Content-Type: application/json" --data-binary @resolve.json
+          echo
