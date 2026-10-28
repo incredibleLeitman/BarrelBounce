@@ -43,6 +43,9 @@ func _build_ui() -> void:
 	top.add_child(UI.spacer(8, false))
 	top.add_child(UI.title("Levels", 40))
 	top.add_child(UI.hspacer_expand())
+	var import_btn := UI.button("Import code", 48, 20)
+	import_btn.pressed.connect(_show_import)
+	top.add_child(import_btn)
 	var new_btn := UI.accent_button("+ New level", 48, 20)
 	new_btn.pressed.connect(func():
 		GameState.editor_level = GameState.new_level()
@@ -120,6 +123,9 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 	info.add_child(UI.label(meta, 16, UI.MUTED))
 
 	if editable:
+		var share := UI.small_button("  Share  ")
+		share.pressed.connect(func(): _show_share(level))
+		row.add_child(share)
 		var del := UI.icon_button("", "trash")
 		del.pressed.connect(func():
 			UI.confirm(UI.root_of(ui), "Delete level?", "“%s” will be gone for good." % str(level.get("name", "")), "Delete", func():
@@ -139,3 +145,71 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 	var play := UI.accent_button("  Play  ", 48, 20)
 	play.pressed.connect(func(): GameState.play_level(level))
 	row.add_child(play)
+
+
+# ---------------------------------------------------------------- level codes
+
+func _show_share(level: Dictionary) -> void:
+	var root := UI.root_of(ui)
+	var body := UI.dialog(root, "Share “%s”" % str(level.get("name", "")), 640)
+	body.add_child(UI.label("Send this code to a friend. They paste it under “Import code”.", 16, UI.MUTED))
+	var code := GameState.level_to_code(level)
+	var box := TextEdit.new()
+	box.text = code
+	box.editable = false
+	box.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	box.custom_minimum_size = Vector2(0, 160)
+	box.add_theme_font_size_override("font_size", 14)
+	body.add_child(box)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	body.add_child(row)
+	var copy := UI.accent_button("Copy to clipboard", 48, 18)
+	copy.pressed.connect(func():
+		DisplayServer.clipboard_set(code)
+		UI.toast(root, "Code copied", UI.GOOD))
+	row.add_child(copy)
+	var select := UI.button("Select all", 48, 18)
+	select.pressed.connect(func():
+		box.grab_focus()
+		box.select_all())
+	row.add_child(select)
+	body.add_child(UI.label("%d characters" % code.length(), 13, UI.MUTED))
+
+
+func _show_import() -> void:
+	var root := UI.root_of(ui)
+	var body := UI.dialog(root, "Import a level code", 640)
+	body.add_child(UI.label("Paste a code that starts with BB1: and the level is added to your levels.", 16, UI.MUTED))
+	var box := TextEdit.new()
+	box.placeholder_text = "BB1:..."
+	box.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	box.custom_minimum_size = Vector2(0, 160)
+	box.add_theme_font_size_override("font_size", 14)
+	body.add_child(box)
+	var status := UI.label("", 15, UI.BAD)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	body.add_child(row)
+	var paste := UI.button("Paste from clipboard", 48, 18)
+	paste.pressed.connect(func(): box.text = DisplayServer.clipboard_get())
+	row.add_child(paste)
+	var do_import := UI.accent_button("Import", 48, 18)
+	do_import.pressed.connect(func():
+		var level := GameState.level_from_code(box.text)
+		if level.is_empty():
+			status.text = "That is not a valid level code."
+			return
+		if GameState.save_user_level(level):
+			# Close the dialog (its shade is the dialog's top-most ancestor under the UI root).
+			var shade := body
+			while shade.get_parent() != root:
+				shade = shade.get_parent()
+			shade.queue_free()
+			tab = Tab.MINE
+			_refresh()
+			UI.toast(root, "Imported “%s” by %s" % [str(level.get("name", "")), str(level.get("author", "?"))], UI.GOOD)
+		else:
+			status.text = "Could not save the level.")
+	row.add_child(do_import)
+	body.add_child(status)

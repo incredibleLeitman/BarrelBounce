@@ -114,6 +114,14 @@ future shared leaderboard would use.
 
 Inside: `levels/<id>.json`, `scores.json`, `profile.json`.
 
+### Sharing levels with a code
+
+Every level of yours has a **Share** button in level select that shows a code like
+`BB1:eJyrVkrOz...` (the level JSON, deflate-compressed and base64-encoded, a few hundred
+characters). Send it any way you like; the receiver pastes it under **Import code** and the
+level lands in their *My levels* with the original author's name and a fresh id. The
+`BB1:` prefix versions the format so later versions can still read old codes.
+
 Coordinates are in the 1280x720 play area (y down). Angles: 0° = right, -90° = up.
 Leaving the rectangle `Simulation.WORLD` (a bit larger than the screen) kills the ball.
 

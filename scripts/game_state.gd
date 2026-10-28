@@ -189,6 +189,47 @@ func delete_user_level(level_id: String) -> void:
 		dir.remove(level_id + ".json")
 
 
+# ---------------------------------------------------------------- level codes
+
+const CODE_PREFIX := "BB1:"
+const CODE_MAX_BYTES := 1 << 20
+
+
+## A level as a shareable text: deflate-compressed JSON, base64, with a version prefix.
+func level_to_code(level: Dictionary) -> String:
+	var payload := level.duplicate(true)
+	payload.erase("modified")
+	payload.erase("id")
+	var raw := JSON.stringify(payload).to_utf8_buffer()
+	return CODE_PREFIX + Marshalls.raw_to_base64(raw.compress(FileAccess.COMPRESSION_DEFLATE))
+
+
+## Inverse of [method level_to_code]. Returns {} for anything that is not a valid level.
+## The imported level gets a fresh id so it never overwrites an existing one.
+func level_from_code(code: String) -> Dictionary:
+	var text := code.strip_edges().replace("\n", "").replace(" ", "")
+	if not text.begins_with(CODE_PREFIX):
+		return {}
+	var packed := Marshalls.base64_to_raw(text.substr(CODE_PREFIX.length()))
+	if packed.is_empty():
+		return {}
+	var raw := packed.decompress_dynamic(CODE_MAX_BYTES, FileAccess.COMPRESSION_DEFLATE)
+	if raw.is_empty():
+		return {}
+	var data = JSON.parse_string(raw.get_string_from_utf8())
+	if typeof(data) != TYPE_DICTIONARY:
+		return {}
+	if typeof(data.get("cannons")) != TYPE_ARRAY or data["cannons"].is_empty():
+		return {}
+	for c in data["cannons"]:
+		if typeof(c) != TYPE_DICTIONARY or not c.has("x") or not c.has("y"):
+			return {}
+	if typeof(data.get("finish")) != TYPE_DICTIONARY:
+		return {}
+	data["id"] = new_level_id()
+	return normalize_level(data)
+
+
 # ---------------------------------------------------------------- scores
 
 func best_ticks(level_id: String) -> int:

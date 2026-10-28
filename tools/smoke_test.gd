@@ -12,6 +12,7 @@ func _ready() -> void:
 	await _test_play_with_taps()
 	await _test_editor_roundtrip()
 	await _test_level_select_lists_saved_level()
+	_test_level_codes()
 	print("SMOKE TEST " + ("PASSED" if failures == 0 else "FAILED (%d)" % failures))
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -150,3 +151,17 @@ func _test_level_select_lists_saved_level() -> void:
 	check(not still, "level deleted again")
 	select.queue_free()
 	await get_tree().process_frame
+
+
+func _test_level_codes() -> void:
+	print("level codes: round trip and validation")
+	var level: Dictionary = GameState.builtin_levels()[6]
+	var code := GameState.level_to_code(level)
+	check(code.begins_with("BB1:") and code.length() < 900, "code is compact: %d chars" % code.length())
+	var back := GameState.level_from_code(code + "\n")
+	check(not back.is_empty(), "code decodes")
+	check(back.get("name") == level["name"] and back["cannons"].size() == level["cannons"].size(), "name and cannons survive the round trip")
+	check(back["cannons"][1]["behaviors"][0]["type"] == "move", "behaviours survive the round trip")
+	check(back["id"] != level["id"], "imported level gets a fresh id")
+	check(GameState.level_from_code("hello").is_empty(), "garbage is rejected")
+	check(GameState.level_from_code("BB1:aGVsbG8=").is_empty(), "non-level payload is rejected")
