@@ -488,8 +488,10 @@ func _structure_changed() -> void:
 	_rebuild_inspector()
 
 
-func _set_selection(indices: Array[int], finish := false) -> void:
-	selection = indices.duplicate()
+func _set_selection(indices: Array, finish := false) -> void:
+	selection.clear()
+	for i in indices:
+		selection.append(int(i))
 	finish_selected = finish and indices.is_empty()
 	view.set_selection(selection, finish_selected)
 	_rebuild_inspector()

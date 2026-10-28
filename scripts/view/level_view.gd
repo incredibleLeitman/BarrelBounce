@@ -52,9 +52,13 @@ func rebuild() -> void:
 	cannon_nodes.clear()
 	backdrop.show_bounds = show_hints
 	backdrop.queue_redraw()
+	var per_type: Dictionary = {}
 	for c in sim.cannons:
 		var node := CannonNode.new(c)
 		node.show_hints = show_hints
+		var t := str(c.get("type", "normal"))
+		node.shade_index = int(per_type.get(t, 0))
+		per_type[t] = node.shade_index + 1
 		add_child(node)
 		cannon_nodes.append(node)
 	# Player above cannons.
@@ -81,7 +85,9 @@ func refresh() -> void:
 
 func set_selection(indices: Array, finish_selected: bool) -> void:
 	for i in cannon_nodes.size():
-		cannon_nodes[i].selected = indices.has(i)
+		var on: bool = indices.has(i)
+		cannon_nodes[i].selected = on
+		cannon_nodes[i].z_index = 1 if on else 0   # selected patterns draw above the others
 		cannon_nodes[i].queue_redraw()
 	finish_node.selected = finish_selected
 

@@ -9,6 +9,10 @@ var selected := false
 var show_hints := false
 var pulse := 0.0
 var fuse := 1.0           # 0..1, fraction of the fuse left (auto cannons only)
+## Which cannon of its type this is (0, 1, 2, ...). Movement hints get a darker shade per step
+## so neighbouring cannons of the same type can be told apart.
+var shade_index := 0
+const SHADE_STEPS := 4
 var spark_rng := RandomNumberGenerator.new()
 
 
@@ -106,22 +110,33 @@ func _draw_fuse() -> void:
 			draw_circle(tip + dir * len, 1.5, Color(col, 0.9))
 
 
+## Colour of this cannon's movement hints: the pulsing selection colour when selected,
+## otherwise a lighter tint of the type colour, one step darker per cannon of the same type.
+func hint_color() -> Color:
+	if selected:
+		return Color(UI.ACCENT_2, 0.6 + 0.35 * sin(pulse * 6.0))
+	var type_color: Color = Simulation.type_info(str(data.get("type", "normal")))["color"]
+	var tint := type_color.lightened(0.55).darkened(0.24 * (shade_index % SHADE_STEPS))
+	return Color(tint, 0.6)
+
+
 func _draw_hints() -> void:
 	var base := Vector2(float(data.get("x", 0.0)), float(data.get("y", 0.0))) - position
-	var hint := Color(UI.ACCENT_2, 0.35)
+	var hint := hint_color()
+	var w := 3.0 if selected else 2.0
 	for b in data.get("behaviors", []):
 		match str(b.get("type", "")):
 			"move":
 				var d: Vector2 = Simulation.DIRS.get(str(b.get("dir", "right")), Vector2.RIGHT)
 				var r := float(b.get("range", 150.0))
-				draw_dashed_line(base, base + d * r, hint, 2.0, 8.0)
+				draw_dashed_line(base, base + d * r, hint, w, 8.0)
 				draw_circle(base + d * r, 5.0, hint)
 			"orbit":
-				draw_arc(base, float(b.get("radius", 120.0)), 0.0, TAU, 48, hint, 2.0)
+				draw_arc(base, float(b.get("radius", 120.0)), 0.0, TAU, 48, hint, w)
 				draw_circle(base, 4.0, hint)
 			"sweep":
 				var a0 := deg_to_rad(float(data.get("angle", 0.0)) + float(b.get("from", -45.0)))
 				var a1 := deg_to_rad(float(data.get("angle", 0.0)) + float(b.get("to", 45.0)))
-				draw_arc(Vector2.ZERO, 62.0, minf(a0, a1), maxf(a0, a1), 24, hint, 3.0)
+				draw_arc(Vector2.ZERO, 62.0, minf(a0, a1), maxf(a0, a1), 24, hint, w + 1.0)
 			"rotate":
-				draw_arc(Vector2.ZERO, 62.0, 0.0, TAU, 48, Color(hint, 0.5), 1.5)
+				draw_arc(Vector2.ZERO, 62.0, 0.0, TAU, 48, Color(hint, hint.a * 0.6), w - 0.5)

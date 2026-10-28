@@ -15,14 +15,22 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute("user://screenshots")
 	await get_tree().process_frame
 	GameState.current_level = GameState.builtin_levels()[6]
-	GameState.editor_level = GameState.builtin_levels()[5].duplicate(true)
-	GameState.editor_level["background"] = "underwater"
+	# Editor shot: several cannons of the same type with movement, close together, one selected.
+	GameState.editor_level = GameState.normalize_level({
+		"name": "Pattern colours", "background": "underwater",
+		"cannons": [
+			{"x": 160.0, "y": 560.0, "angle": -45.0, "type": "normal", "behaviors": []},
+			{"x": 520.0, "y": 360.0, "angle": -60.0, "type": "normal", "behaviors": [{"type": "orbit", "radius": 110.0, "period": 4.0}]},
+			{"x": 640.0, "y": 420.0, "angle": -30.0, "type": "normal", "behaviors": [{"type": "move", "dir": "right", "range": 250.0, "period": 2.0}, {"type": "sweep", "from": -40.0, "to": 40.0, "period": 2.0}]},
+			{"x": 760.0, "y": 300.0, "angle": -90.0, "type": "normal", "behaviors": [{"type": "orbit", "radius": 80.0, "period": 3.0, "clockwise": false}]},
+			{"x": 900.0, "y": 500.0, "angle": 180.0, "type": "weak", "behaviors": [{"type": "rotate", "speed": 90.0}, {"type": "move", "dir": "up", "range": 200.0, "period": 3.0}]},
+		],
+		"finish": {"x": 1150.0, "y": 100.0, "w": 60.0, "h": 500.0}, "start": 0})
 	for shot in SHOTS:
 		var scene: Node = (load(shot[1]) as PackedScene).instantiate()
 		get_tree().root.add_child(scene)
 		if shot[0] == "editor":
-			# Show the multi-select inspector.
-			scene._select_all()
+			scene._set_selection([2])
 		if shot[0] == "level":
 			# Let the ball fly a bit so the trail shows up.
 			for i in 30:
