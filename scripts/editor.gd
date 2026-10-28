@@ -289,11 +289,11 @@ func _build_cannon_inspector() -> void:
 		type_opt.select(Simulation.TYPE_ORDER.find(str(common_type)))
 	var hint_text := ""
 	if common_type != null:
-		hint_text = Simulation.type_info(str(common_type))["hint"]
+		hint_text = tr(Simulation.type_info(str(common_type))["hint"])
 	if has_start:
-		hint_text = "The start cannon is always a plain cannon so the level only begins with your tap."
+		hint_text = tr("The start cannon is always a plain cannon so the level only begins with your tap.")
 		if multi:
-			hint_text += " It keeps its type when you change the others."
+			hint_text += tr(" It keeps its type when you change the others.")
 	var type_hint := UI.label(hint_text, 14, UI.MUTED, true)
 	type_opt.item_selected.connect(func(i):
 		if i >= Simulation.TYPE_ORDER.size():

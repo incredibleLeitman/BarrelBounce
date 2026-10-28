@@ -90,6 +90,8 @@ func _build_ui() -> void:
 	for lang in GameState.LANGUAGES:
 		var fb := Button.new()
 		fb.icon = load("res://assets/icons/flag_%s.svg" % lang)
+		fb.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		fb.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 		fb.custom_minimum_size = Vector2(72, 52)
 		fb.focus_mode = Control.FOCUS_NONE
 		fb.toggle_mode = true

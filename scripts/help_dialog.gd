@@ -35,10 +35,11 @@ static func show(parent: Control) -> VBoxContainer:
 	body.add_child(UI.label("Cannon types", 24))
 	for key in Simulation.TYPE_ORDER:
 		var info: Dictionary = Simulation.TYPES[key]
-		var extra := ""
+		# Translate the pieces separately: the joined sentence is not a translation key.
+		var hint := TranslationServer.translate(info["hint"])
 		if key == Simulation.START_TYPE:
-			extra = " The start cannon is always this type."
-		_row(body, _cannon_figure(key, []), info["label"], info["hint"] + extra)
+			hint += TranslationServer.translate(" The start cannon is always this type.")
+		_row(body, _cannon_figure(key, []), info["label"], hint)
 
 	body.add_child(UI.spacer(10))
 	body.add_child(UI.label("Movement (combine as many as you like)", 24))
