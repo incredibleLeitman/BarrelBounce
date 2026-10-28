@@ -90,6 +90,11 @@ func _build_ui() -> void:
 			UI.confirm(root, "Exit BarrelBounce?", "Your levels and best times are saved.", "Exit", func(): get_tree().quit()))
 		box.add_child(quit)
 
+	# First start: open the rules once.
+	if not GameState.help_seen():
+		GameState.mark_help_seen()
+		HelpDialog.show.call_deferred(root)
+
 	# Title bob
 	var tw := create_tween().set_loops()
 	tw.tween_property(t, "position:y", t.position.y - 6.0, 1.2).set_trans(Tween.TRANS_SINE)

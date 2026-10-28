@@ -162,6 +162,15 @@ func player_color() -> Color:
 	return Color(str(profile.get("color", PLAYER_COLORS[0])))
 
 
+func help_seen() -> bool:
+	return bool(profile.get("help_seen", false))
+
+
+func mark_help_seen() -> void:
+	profile["help_seen"] = true
+	set_profile(str(profile["name"]), str(profile["color"]))
+
+
 func ghost_enabled() -> bool:
 	return bool(profile.get("ghost", true))
 
@@ -247,7 +256,8 @@ func proof_for(level: Dictionary) -> Dictionary:
 	var best := best_entry(str(level.get("id", "")), rev)
 	if best.is_empty():
 		return {}
-	return {"rev": rev, "ticks": best["ticks"], "taps": best.get("taps", []), "player": best.get("player", player_name())}
+	return {"rev": rev, "ticks": best["ticks"], "taps": best.get("taps", []), "player": best.get("player", player_name()),
+		"player_id": best.get("player_id", player_id()), "color": best.get("color", str(profile.get("color", PLAYER_COLORS[0])))}
 
 
 ## The level creator's proof run for the current revision, or {}.
@@ -277,7 +287,8 @@ func save_user_level(level: Dictionary) -> bool:
 		level.erase("verified")
 	else:
 		level["verified"] = {"rev": rev, "ticks": best["ticks"], "taps": best.get("taps", []),
-			"player": best.get("player", player_name()), "player_id": best.get("player_id", player_id())}
+			"player": best.get("player", player_name()), "player_id": best.get("player_id", player_id()),
+			"color": best.get("color", str(profile.get("color", PLAYER_COLORS[0])))}
 	var f := FileAccess.open(USER_DIR + str(level["id"]) + ".json", FileAccess.WRITE)
 	if f == null:
 		push_error("Could not save level: " + str(FileAccess.get_open_error()))
@@ -380,7 +391,8 @@ func record_time(level_id: String, rev: String, ticks: int, taps: Array = []) ->
 	var best := best_ticks(level_id, rev)
 	if best >= 0 and ticks >= best:
 		return false
-	scores[level_id] = {"rev": rev, "ticks": ticks, "taps": taps.duplicate(), "player": player_name(), "player_id": player_id()}
+	scores[level_id] = {"rev": rev, "ticks": ticks, "taps": taps.duplicate(), "player": player_name(),
+		"player_id": player_id(), "color": str(profile.get("color", PLAYER_COLORS[0]))}
 	_save_scores()
 	return true
 

@@ -52,7 +52,7 @@ const TYPES := {
 		"hint": "Short, gentle hops."},
 	"dash": {"label": "Blink", "power": 650.0, "teleport": 210.0,
 		"color": Color("#4cc9f0"), "barrel": 20.0,
-		"hint": "Teleports the ball 210 px along the barrel, then it flies on."},
+		"hint": "Teleports the ball a short distance along the barrel, then it flies on."},
 	"double": {"label": "Hopper", "power": 950.0, "jumps": 1, "color": Color("#f6d55c"), "barrel": 22.0,
 		"hint": "Tap again in the air for one extra boost."},
 	"bubble": {"label": "Bubble", "power": 820.0, "gravity": 0.35, "color": Color("#c77dff"), "barrel": 22.0,

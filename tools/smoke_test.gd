@@ -229,9 +229,10 @@ func _test_editor_roundtrip() -> void:
 	check(editor.camera.position.x > before.x, "editor pans")
 	editor.camera.zoom_by(10.0, Vector2(400, 300))
 	check(editor.camera.zoom.x == 1.0, "editor zoom stops at the default view")
-	check(editor.view.backdrop.show_grid, "grid is on by default in the editor")
+	check(not editor.view.backdrop.show_grid, "grid is off by default in the editor")
+	editor.grid_button.button_pressed = true
+	check(editor.view.backdrop.show_grid, "grid button shows the grid")
 	editor.grid_button.button_pressed = false
-	check(not editor.view.backdrop.show_grid, "grid button hides the grid")
 	editor._save()
 	var saved := GameState.user_levels()
 	var found := false

@@ -129,15 +129,14 @@ func _build_ui() -> void:
 	help.pressed.connect(func(): HelpDialog.show(root))
 	top.add_child(help)
 
-	grid_button = UI.small_button("  Grid  ")
+	grid_button = UI.icon_button("", "grid")
 	grid_button.toggle_mode = true
-	grid_button.button_pressed = true
+	grid_button.button_pressed = false
+	grid_button.tooltip_text = "Show the alignment grid"
 	grid_button.toggled.connect(func(on):
 		view.backdrop.show_grid = on
 		view.backdrop.queue_redraw())
 	top.add_child(grid_button)
-	view.backdrop.show_grid = true
-	view.backdrop.queue_redraw()
 
 	select_button = UI.icon_button("", "select")
 	select_button.toggle_mode = true
@@ -359,21 +358,6 @@ func _build_cannon_inspector() -> void:
 	inspector_box.add_child(bh)
 	bh.add_child(UI.label("Movement", 20))
 	bh.add_child(UI.hspacer_expand())
-	# Sequence mode, shown once the cannon has at least one step.
-	var has_step := false
-	for c in cannons:
-		for blk in c["behaviors"]:
-			if bool(blk.get("seq", false)):
-				has_step = true
-	if has_step:
-		var pingpong := str(cannons[0].get("seq_mode", "loop")) == "pingpong"
-		var mode_btn := UI.small_button("  Back & forth  " if pingpong else "  Loop  ")
-		mode_btn.tooltip_text = "How the sequence repeats: restart from step 1, or play it forwards and then backwards"
-		mode_btn.pressed.connect(func():
-			for c in cannons:
-				c["seq_mode"] = "loop" if pingpong else "pingpong"
-			_structure_changed())
-		bh.add_child(mode_btn)
 	var add_opt := OptionButton.new()
 	add_opt.custom_minimum_size.y = 40
 	add_opt.add_item("+ Add…", 0)
@@ -397,6 +381,21 @@ func _build_cannon_inspector() -> void:
 			c["behaviors"].append(b)
 		_structure_changed())
 	bh.add_child(add_opt)
+	# Sequence mode on its own row (the header must stay narrower than the inspector).
+	var has_step := false
+	for c in cannons:
+		for blk in c["behaviors"]:
+			if bool(blk.get("seq", false)):
+				has_step = true
+	if has_step:
+		var pingpong := str(cannons[0].get("seq_mode", "loop")) == "pingpong"
+		var mode_btn := UI.small_button("Sequence: back & forth" if pingpong else "Sequence: loop")
+		mode_btn.tooltip_text = "How the sequence repeats: play it forwards and then backwards, or restart from step 1"
+		mode_btn.pressed.connect(func():
+			for c in cannons:
+				c["seq_mode"] = "loop" if pingpong else "pingpong"
+			_structure_changed())
+		inspector_box.add_child(mode_btn)
 
 	# Behaviour rows are editable for the whole selection only when every cannon has the
 	# same list; otherwise the lists cannot be lined up and we offer a reset instead.
@@ -464,6 +463,8 @@ func _build_behavior_row(cannons: Array, bi: int) -> void:
 			blk["seq"] = not is_step
 			if not is_step and not blk.has("duration"):
 				blk["duration"] = Simulation.default_duration(blk)
+			if not c.has("seq_mode"):
+				c["seq_mode"] = "pingpong"   # new sequences play back and forth by default
 		_structure_changed())
 	head.add_child(mode)
 	if is_step:

@@ -103,6 +103,7 @@ func bind_ghosts(sims: Array) -> void:
 		var node := PlayerNode.new()
 		node.ghost = true
 		node.body_color = entry.get("color", Color.WHITE)
+		node.ghost_strength = float(entry.get("strength", 1.0))
 		node.z_index = 2
 		add_child(node)
 		move_child(node, player_node.get_index())

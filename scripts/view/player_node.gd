@@ -9,6 +9,7 @@ const DEAD_COLOR := Color("#e5484d")
 var body_color := Color("#ffd166")
 ## A ghost is the translucent replay of the best run: no face, no puffs, a faint trail.
 var ghost := false
+var ghost_strength := 1.0   # 1 = normal ghost, lower = fainter (other players' ghosts)
 var trail: PackedVector2Array = PackedVector2Array()
 var facing := 0.0
 var in_cannon := true
@@ -119,9 +120,10 @@ func _draw_ghost() -> void:
 	if dead:
 		return
 	var c := body_color
+	var k := ghost_strength
 	for i in range(1, trail.size()):
 		var a := float(i) / trail.size()
-		draw_line(trail[i - 1] - position, trail[i] - position, Color(c, a * 0.2), 2.0)
-	draw_circle(Vector2.ZERO, 15.0, Color(c, 0.16))
-	draw_arc(Vector2.ZERO, 15.0, 0.0, TAU, 24, Color(c, 0.6), 2.0)
-	draw_circle(Vector2(-4, -5), 4.0, Color(c, 0.2))
+		draw_line(trail[i - 1] - position, trail[i] - position, Color(c, a * 0.2 * k), 2.0)
+	draw_circle(Vector2.ZERO, 15.0, Color(c, 0.16 * k))
+	draw_arc(Vector2.ZERO, 15.0, 0.0, TAU, 24, Color(c, 0.6 * k), 2.0)
+	draw_circle(Vector2(-4, -5), 4.0, Color(c, 0.2 * k))

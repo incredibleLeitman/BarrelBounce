@@ -188,16 +188,18 @@ func _load_ghost() -> void:
 		var own := GameState.best_entry(str(level.get("id", "")), rev)
 		var creator_is_me := not creator.is_empty() and str(creator.get("player_id", "")) == GameState.player_id()
 		if not creator.is_empty() and not creator_is_me:
-			_add_ghost(creator, str(creator.get("player", "author")), Color.WHITE)
+			# The creator's ghost wears the creator's colour, fainter than your own.
+			var col := Color(str(creator.get("color", "#ffffff")))
+			_add_ghost(creator, str(creator.get("player", "author")), col, 0.6)
 		if not own.is_empty():
-			_add_ghost(own, "you", GameState.player_color())
+			_add_ghost(own, "you", GameState.player_color(), 1.0)
 	var binds: Array = []
 	for g in ghosts:
-		binds.append({"sim": g["sim"], "color": g["color"]})
+		binds.append({"sim": g["sim"], "color": g["color"], "strength": g["strength"]})
 	view.bind_ghosts(binds)
 
 
-func _add_ghost(entry: Dictionary, label: String, color: Color) -> void:
+func _add_ghost(entry: Dictionary, label: String, color: Color, strength: float) -> void:
 	var taps_list: Array = entry.get("taps", [])
 	if taps_list.is_empty():
 		return
@@ -207,7 +209,7 @@ func _add_ghost(entry: Dictionary, label: String, color: Color) -> void:
 		tap_set[int(t)] = true
 		first = mini(first, int(t))
 	ghosts.append({"sim": Simulation.new(level.duplicate(true)), "taps": tap_set, "first_tap": first,
-		"label": label, "color": color, "ticks": int(entry.get("ticks", -1))})
+		"label": label, "color": color, "strength": strength, "ticks": int(entry.get("ticks", -1))})
 
 
 # ---------------------------------------------------------------- input

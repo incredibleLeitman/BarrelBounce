@@ -157,7 +157,7 @@ func _draw_hints() -> void:
 				var a1 := deg_to_rad(angle_base + float(b.get("to", 45.0)))
 				draw_arc(Vector2.ZERO, 62.0, minf(a0, a1), maxf(a0, a1), 24, hint, w + 1.0)
 			"rotate":
-				draw_arc(Vector2.ZERO, 62.0, 0.0, TAU, 48, Color(hint, hint.a * 0.6), w - 0.5)
+				draw_arc(Vector2.ZERO, 62.0, 0.0, TAU, 48, hint, w)
 			"path":
 				var line := Simulation.path_polyline(b)
 				var closed := bool(b.get("closed", true))
