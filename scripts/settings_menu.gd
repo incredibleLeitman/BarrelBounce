@@ -83,8 +83,27 @@ func _build_ui() -> void:
 		grid.add_child(b)
 		swatches.append(b)
 
+	box.add_child(UI.label("Language", 18, UI.MUTED))
+	var flags := HBoxContainer.new()
+	flags.add_theme_constant_override("separation", 10)
+	box.add_child(flags)
+	for lang in GameState.LANGUAGES:
+		var fb := Button.new()
+		fb.icon = load("res://assets/icons/flag_%s.svg" % lang)
+		fb.custom_minimum_size = Vector2(72, 52)
+		fb.focus_mode = Control.FOCUS_NONE
+		fb.toggle_mode = true
+		fb.button_pressed = lang == GameState.language()
+		fb.add_theme_stylebox_override("pressed", UI.flat(UI.PANEL_LIGHT, 14, 8, Color.WHITE))
+		var chosen: String = lang
+		fb.pressed.connect(func():
+			GameState.set_profile(player_name, color_hex)
+			GameState.set_language(chosen)
+			GameState.go(GameState.SCENE_SETTINGS))   # rebuild this scene in the new language
+		flags.add_child(fb)
+
 	var ghost := CheckButton.new()
-	ghost.text = "Show the ghost of the best run while playing"
+	ghost.text = tr("Show the ghost of the best run while playing")
 	ghost.button_pressed = GameState.ghost_enabled()
 	ghost.add_theme_font_size_override("font_size", 18)
 	ghost.toggled.connect(func(on): GameState.set_ghost_enabled(on))

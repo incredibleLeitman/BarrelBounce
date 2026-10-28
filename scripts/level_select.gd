@@ -16,6 +16,8 @@ func _ready() -> void:
 	add_child(backdrop)
 	if GameState.user_levels().size() > 0:
 		tab = Tab.MINE
+	if GameState.last_tab >= 0:
+		tab = GameState.last_tab
 	_build_ui()
 	_refresh()
 
@@ -62,6 +64,7 @@ func _build_ui() -> void:
 		var which: int = pair[1]
 		b.pressed.connect(func():
 			tab = which
+			GameState.last_tab = which
 			_refresh())
 		tabs.add_child(b)
 		tab_buttons.append(b)
@@ -127,19 +130,19 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 	var meta_row := HBoxContainer.new()
 	meta_row.add_theme_constant_override("separation", 0)
 	info.add_child(meta_row)
-	meta_row.add_child(UI.label("by %s  ·  %d cannons  ·  " % [author, level.get("cannons", []).size()], 16, UI.MUTED))
+	meta_row.add_child(UI.label(tr("by %s  ·  %d cannons  ·  ") % [author, level.get("cannons", []).size()], 16, UI.MUTED))
 	var creator := GameState.creator_proof(level)
 	var creator_is_me := not creator.is_empty() and str(creator.get("player_id", "")) == GameState.player_id()
 	if best >= 0:
 		# Orange when you hold the record: no creator time to beat, or yours is at least as good.
 		var record := creator.is_empty() or creator_is_me or best <= int(creator["ticks"])
-		meta_row.add_child(UI.label("best " + Simulation.format_ticks(best), 16, UI.ACCENT if record else UI.MUTED))
+		meta_row.add_child(UI.label(tr("best %s") % Simulation.format_ticks(best), 16, UI.ACCENT if record else UI.MUTED))
 	elif GameState.best_is_stale(id, rev):
 		meta_row.add_child(UI.label("level changed: best time reset", 16, UI.MUTED))
 	else:
 		meta_row.add_child(UI.label("not finished yet", 16, UI.MUTED))
 	if not creator.is_empty() and not creator_is_me:
-		meta_row.add_child(UI.label("  ·  %s: %s" % [str(creator.get("player", "creator")), Simulation.format_ticks(int(creator["ticks"]))], 16, UI.MUTED))
+		meta_row.add_child(UI.label(tr("  ·  %s: %s") % [str(creator.get("player", "creator")), Simulation.format_ticks(int(creator["ticks"]))], 16, UI.MUTED))
 
 	if editable and Online.enabled():
 		var publish := UI.small_button("  Publish  ")
@@ -147,7 +150,7 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 			publish.pressed.connect(func(): _publish(level))
 		else:
 			publish.disabled = true
-			publish.tooltip_text = "Finish this version of the level once, then you can publish it."
+			publish.tooltip_text = tr("Finish this version of the level once, then you can publish it.")
 		row.add_child(publish)
 	if editable:
 		var share := UI.small_button("  Share  ")
@@ -155,7 +158,7 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 			share.pressed.connect(func(): _show_share(level))
 		else:
 			share.disabled = true
-			share.tooltip_text = "Finish this version of the level once, then you can share it."
+			share.tooltip_text = tr("Finish this version of the level once, then you can share it.")
 		row.add_child(share)
 		var del := UI.icon_button("", "trash")
 		del.pressed.connect(func():
@@ -163,7 +166,7 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 				GameState.delete_user_level(str(level["id"]))
 				_refresh()))
 		row.add_child(del)
-	var edit := UI.icon_button("Edit" if editable else "Remix", "pen")
+	var edit := UI.icon_button(tr("Edit") if editable else tr("Remix"), "pen")
 	edit.pressed.connect(func():
 		var copy: Dictionary = level.duplicate(true)
 		if not editable:
@@ -183,7 +186,7 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 func _show_share(level: Dictionary) -> void:
 	var root := UI.root_of(ui)
 	var body := UI.dialog(root, "Share “%s”" % str(level.get("name", "")), 640)
-	body.add_child(UI.label("Send this code to a friend. They paste it under “Import code”. It carries a %s run as proof the level can be finished." % Simulation.format_ticks(int(GameState.proof_for(level)["ticks"])), 16, UI.MUTED, true))
+	body.add_child(UI.label(tr("Send this code to a friend. They paste it under “Import code”. It carries a %s run as proof the level can be finished.") % Simulation.format_ticks(int(GameState.proof_for(level)["ticks"])), 16, UI.MUTED, true))
 	var code := GameState.level_to_code(level)
 	var box := TextEdit.new()
 	box.text = code
@@ -200,7 +203,7 @@ func _show_share(level: Dictionary) -> void:
 		DisplayServer.clipboard_set(code)
 		UI.toast(root, "Code copied", UI.GOOD))
 	row.add_child(copy)
-	body.add_child(UI.label("%d characters" % code.length(), 13, UI.MUTED))
+	body.add_child(UI.label(tr("%d characters") % code.length(), 13, UI.MUTED))
 	# The whole code is selected from the start, ready for Ctrl+C.
 	box.call_deferred("grab_focus")
 	box.call_deferred("select_all")
@@ -229,7 +232,7 @@ func _show_import() -> void:
 	do_import.pressed.connect(func():
 		var level := GameState.level_from_code(box.text)
 		if level.is_empty():
-			status.text = "That is not a valid level code, or its proof run does not finish the level."
+			status.text = tr("That is not a valid level code, or its proof run does not finish the level.")
 			return
 		if GameState.save_user_level(level):
 			# Close the dialog: its shade is the ColorRect ancestor of the body.
@@ -240,9 +243,9 @@ func _show_import() -> void:
 				shade.queue_free()
 			tab = Tab.MINE
 			_refresh()
-			UI.toast(root, "Imported “%s” by %s" % [str(level.get("name", "")), GameState.display_name(str(level.get("author", "?")), str(level.get("author_id", "")))], UI.GOOD)
+			UI.toast(root, tr("Imported “%s” by %s") % [str(level.get("name", "")), GameState.display_name(str(level.get("author", "?")), str(level.get("author_id", "")))], UI.GOOD)
 		else:
-			status.text = "Could not save the level.")
+			status.text = tr("Could not save the level."))
 	row.add_child(do_import)
 	body.add_child(status)
 
@@ -253,7 +256,7 @@ func _publish(level: Dictionary) -> void:
 	var root := UI.root_of(ui)
 	var payload: Dictionary = level.duplicate(true)
 	payload["verified"] = GameState.proof_for(level)
-	UI.toast(root, "Publishing “%s”…" % str(level.get("name", "")), UI.ACCENT_2)
+	UI.toast(root, tr("Publishing “%s”…") % str(level.get("name", "")), UI.ACCENT_2)
 	Online.publish_level(payload, func(ok: bool, data: Dictionary):
 		if not is_instance_valid(root):
 			return
@@ -262,7 +265,7 @@ func _publish(level: Dictionary) -> void:
 			GameState.save_user_level(level)
 			UI.toast(root, "Published. It appears under Community once verified.", UI.GOOD)
 		else:
-			UI.toast(root, "Publish failed: %s" % str(data.get("error", "offline")), UI.BAD))
+			UI.toast(root, tr("Publish failed: %s") % str(data.get("error", "offline")), UI.BAD))
 
 
 func _load_community() -> void:
@@ -298,17 +301,17 @@ func _add_community_row(r: Dictionary) -> void:
 	row.add_child(info)
 	info.add_child(UI.label(str(r.get("name", "Untitled")), 26))
 	var author := GameState.display_name(str(r.get("author_name", "?")), str(r.get("author_id", "")))
-	info.add_child(UI.label("by %s  ·  %s  ·  %d plays" % [author, Simulation.format_ticks(int(r.get("proof_ticks", 0))), int(r.get("plays", 0))], 16, UI.MUTED))
+	info.add_child(UI.label(tr("by %s  ·  %s  ·  %d plays") % [author, Simulation.format_ticks(int(r.get("proof_ticks", 0))), int(r.get("plays", 0))], 16, UI.MUTED))
 	var play := UI.accent_button("  Play  ", 48, 20)
 	var id := str(r.get("id", ""))
 	play.pressed.connect(func():
 		play.disabled = true
-		play.text = "  …  "
+		play.text = tr("  …  ")
 		Online.fetch_level(id, func(ok: bool, data: Dictionary):
 			if not ok or typeof(data.get("level")) != TYPE_DICTIONARY:
 				if is_instance_valid(play):
 					play.disabled = false
-					play.text = "  Play  "
+					play.text = tr("  Play  ")
 				UI.toast(UI.root_of(ui), "Could not download the level.", UI.BAD)
 				return
 			var level: Dictionary = GameState.normalize_level(data["level"])

@@ -10,6 +10,7 @@ var body_color := Color("#ffd166")
 ## A ghost is the translucent replay of the best run: no face, no puffs, a faint trail.
 var ghost := false
 var ghost_strength := 1.0   # 1 = normal ghost, lower = fainter (other players' ghosts)
+var ghost_label := ""       # the player's name, drawn above the ghost in its colour
 var trail: PackedVector2Array = PackedVector2Array()
 var facing := 0.0
 var in_cannon := true
@@ -127,3 +128,7 @@ func _draw_ghost() -> void:
 	draw_circle(Vector2.ZERO, 15.0, Color(c, 0.16 * k))
 	draw_arc(Vector2.ZERO, 15.0, 0.0, TAU, 24, Color(c, 0.6 * k), 2.0)
 	draw_circle(Vector2(-4, -5), 4.0, Color(c, 0.2 * k))
+	if ghost_label != "":
+		var font := ThemeDB.fallback_font
+		var w := font.get_string_size(ghost_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+		draw_string(font, Vector2(-w * 0.5, -22), ghost_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(c, 0.9 * k))

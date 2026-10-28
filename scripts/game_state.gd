@@ -10,6 +10,8 @@ const SCENE_LEVEL := "res://scenes/level.tscn"
 const SCENE_EDITOR := "res://scenes/editor.tscn"
 const SCENE_SETTINGS := "res://scenes/settings.tscn"
 
+## Last tab chosen in the level select, so coming back lands on it again.
+var last_tab: int = -1
 ## Level handed to the level scene.
 var current_level: Dictionary = {}
 ## Where the level scene returns to (level select or editor).
@@ -26,6 +28,7 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(USER_DIR)
 	_load_scores()
 	_load_profile()
+	TranslationServer.set_locale(language())
 
 
 func go(scene_path: String) -> void:
@@ -160,6 +163,22 @@ func display_name(name: String, id: String) -> String:
 
 func player_color() -> Color:
 	return Color(str(profile.get("color", PLAYER_COLORS[0])))
+
+
+const LANGUAGES := ["en", "de"]
+
+
+func language() -> String:
+	var lang := str(profile.get("lang", ""))
+	if lang == "":
+		lang = "de" if OS.get_locale_language() == "de" else "en"
+	return lang if LANGUAGES.has(lang) else "en"
+
+
+func set_language(lang: String) -> void:
+	profile["lang"] = lang
+	set_profile(str(profile["name"]), str(profile["color"]))
+	TranslationServer.set_locale(lang)
 
 
 func help_seen() -> bool:

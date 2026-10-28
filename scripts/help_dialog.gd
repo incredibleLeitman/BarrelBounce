@@ -21,19 +21,15 @@ const BEHAVIOR_FIGURES := {
 }
 const FIGURE_SIZE := Vector2(110, 70)
 const FIGURE_SCALE := 0.5
-const FIGURE_BASE := Vector2(60, 70)   # level units inside the figure
+const FIGURE_BASE := Vector2(68, 70)   # level units inside the figure (ring radius 62 must fit on the left)
 
 
 static func show(parent: Control) -> VBoxContainer:
 	var body := UI.dialog(parent, "How to play", 760)
 	body.add_theme_constant_override("separation", 4)
-	var intro := UI.label("You sit in a cannon. Tap anywhere (or click, press any key or gamepad button) and it fires you " +
-		"wherever it points. Land in another cannon to fire again, cross the green gate to finish. " +
-		"Fall off the world and you restart with the clock reset. Cannons move on fixed patterns that " +
-		"restart from zero every attempt, so it is all about timing.", 17, UI.MUTED, true)
+	var intro := UI.label("You sit in a cannon. Tap anywhere (or click, press any key or gamepad button) and it fires you wherever it points. Land in another cannon to fire again, cross the green gate to finish. Fall off the world and you restart with the clock reset. Cannons move on fixed patterns that restart from zero every attempt, so it is all about timing.", 17, UI.MUTED, true)
 	body.add_child(intro)
-	body.add_child(UI.label("Zoom with the mouse wheel or a pinch, hold and drag to look around. Escape restarts the attempt. " +
-		"A translucent ghost replays the best run; switch it off with the Ghost button or under Player.", 15, UI.MUTED, true))
+	body.add_child(UI.label("Zoom with the mouse wheel or a pinch, hold and drag to look around. Escape restarts the attempt. A translucent ghost replays the best run; switch it off with the Ghost button or under Player.", 15, UI.MUTED, true))
 
 	body.add_child(UI.spacer(10))
 	body.add_child(UI.label("Cannon types", 24))
@@ -52,12 +48,9 @@ static func show(parent: Control) -> VBoxContainer:
 	body.add_child(UI.spacer(10))
 	body.add_child(UI.label("Together or one after another", 24))
 	_row(body, _icon_figure("par"), "Together",
-		"The block runs all the time and its movement is added to the other blocks. " +
-		"Two moves in opposite directions cancel each other out.")
+		"The block runs all the time and its movement is added to the other blocks. Two moves in opposite directions cancel each other out.")
 	_row(body, _icon_figure("seq"), "Step",
-		"Numbered blocks play one after another, each for its duration, each starting where the previous " +
-		"step ended. The sequence plays back and forth or loops. \"Move left, then move right\" goes there and back. " +
-		"Click the icon on a block in the editor to switch.")
+		"Numbered blocks play one after another, each for its duration, each starting where the previous step ended. The sequence plays back and forth or loops. \"Move left, then move right\" goes there and back. Click the icon on a block in the editor to switch.")
 	return body
 
 

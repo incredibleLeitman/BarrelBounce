@@ -126,6 +126,14 @@ published levels. Nothing is ranked until `.github/workflows/verify.yml` has rep
 with the game's own simulation (`tools/verify_runs.gd`), every 30 minutes. With `API_URL`
 empty the game is fully offline.
 
+### Languages
+
+All visible text goes through Godot's translation system with English as the source
+strings. `assets/i18n/strings.csv` holds the German column; add a column for another
+language, re-import, and list the generated `.translation` under *Internationalization*
+in the project settings. The language is chosen with the flags under *Player* and defaults
+to the system language (German or English).
+
 ### Player profile
 
 *Player* on the main menu lets you pick a ball colour and roll a random name. It is stored

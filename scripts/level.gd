@@ -106,7 +106,7 @@ func _build_ui() -> void:
 	ghost_button = UI.small_button("  Ghost  ")
 	ghost_button.toggle_mode = true
 	ghost_button.button_pressed = GameState.ghost_enabled()
-	ghost_button.tooltip_text = "Show the ghost of the best run"
+	ghost_button.tooltip_text = tr("Show the ghost of the best run")
 	ghost_button.toggled.connect(func(on):
 		GameState.set_ghost_enabled(on)
 		_load_ghost()
@@ -166,7 +166,7 @@ func _update_best() -> void:
 	var best := GameState.best_ticks(id, rev)
 	var parts: Array = []
 	if best >= 0:
-		parts.append("best " + Simulation.format_ticks(best))
+		parts.append(tr("best %s") % Simulation.format_ticks(best))
 	var creator := GameState.creator_proof(level)
 	if not creator.is_empty() and str(creator.get("player_id", "")) != GameState.player_id():
 		parts.append("%s: %s" % [str(creator.get("player", "author")), Simulation.format_ticks(int(creator["ticks"]))])
@@ -174,13 +174,13 @@ func _update_best() -> void:
 		var names: Array = []
 		for g in ghosts:
 			names.append(g["label"])
-		parts.append("ghost: " + ", ".join(names))
+		parts.append(tr("ghost: %s") % ", ".join(names))
 	if not parts.is_empty():
-		best_label.text = "  ·  ".join(parts)
+		best_label.text = tr("  ·  ").join(parts)
 	elif GameState.best_is_stale(id, rev):
-		best_label.text = "level changed: best time reset"
+		best_label.text = tr("level changed: best time reset")
 	else:
-		best_label.text = "no time yet"
+		best_label.text = tr("no time yet")
 
 
 ## Ghosts replay the best runs of this revision: the level creator's proof run (white) and
@@ -197,10 +197,10 @@ func _load_ghost() -> void:
 			var col := Color(str(creator.get("color", "#ffffff")))
 			_add_ghost(creator, str(creator.get("player", "author")), col, 0.6)
 		if not own.is_empty():
-			_add_ghost(own, "you", GameState.player_color(), 1.0)
+			_add_ghost(own, tr("you"), GameState.player_color(), 1.0)
 	var binds: Array = []
 	for g in ghosts:
-		binds.append({"sim": g["sim"], "color": g["color"], "strength": g["strength"]})
+		binds.append({"sim": g["sim"], "color": g["color"], "strength": g["strength"], "label": g["label"]})
 	view.bind_ghosts(binds)
 
 
@@ -332,10 +332,10 @@ func _on_finish() -> void:
 	var id := str(level.get("id", ""))
 	var new_best := GameState.record_time(id, rev, ticks, taps)
 	win_time.text = Simulation.format_ticks(ticks)
-	win_best.text = "New best time! Your ghost will race you next time." if new_best else "best " + Simulation.format_ticks(GameState.best_ticks(id, rev))
+	win_best.text = tr("New best time! Your ghost will race you next time.") if new_best else tr("best %s") % Simulation.format_ticks(GameState.best_ticks(id, rev))
 	var creator := GameState.creator_proof(level)
 	if new_best and not creator.is_empty() and str(creator.get("player_id", "")) != GameState.player_id() and ticks < int(creator["ticks"]):
-		win_best.text = "New best time, faster than %s!" % str(creator.get("player", "the creator"))
+		win_best.text = tr("New best time, faster than %s!") % str(creator.get("player", "the creator"))
 	if new_best:
 		_load_ghost()
 	_update_best()
@@ -369,7 +369,7 @@ func _online_after_finish(new_best: bool, ticks: int) -> void:
 			for c in board_box.get_children():
 				c.queue_free()
 			if not ok:
-				board_box.add_child(UI.label("World ranking unavailable (%s)" % str(data.get("error", "offline")), 14, UI.MUTED))
+				board_box.add_child(UI.label(tr("World ranking unavailable (%s)") % str(data.get("error", "offline")), 14, UI.MUTED))
 				return
 			var rows: Array = data.get("rows", [])
 			board_box.add_child(UI.label("World ranking" if not rows.is_empty() else "No verified runs yet. Yours is being verified.", 15, UI.MUTED))
@@ -379,7 +379,7 @@ func _online_after_finish(new_best: bool, ticks: int) -> void:
 				board_box.add_child(UI.label(line, 15, UI.ACCENT if mine else UI.TEXT))
 			var me = data.get("mine")
 			if typeof(me) == TYPE_DICTIONARY and str(me.get("status", "")) == "pending":
-				board_box.add_child(UI.label("Your %s run is waiting for verification." % Simulation.format_ticks(int(me.get("ticks", 0))), 13, UI.MUTED)))
+				board_box.add_child(UI.label(tr("Your %s run is waiting for verification.") % Simulation.format_ticks(int(me.get("ticks", 0))), 13, UI.MUTED)))
 	if new_best:
 		Online.submit_run(level, rev, ticks, taps, func(_ok: bool, _data: Dictionary): show_board.call())
 	else:

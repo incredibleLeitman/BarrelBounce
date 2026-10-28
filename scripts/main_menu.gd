@@ -75,7 +75,7 @@ func _build_ui() -> void:
 		GameState.go(GameState.SCENE_EDITOR))
 	box.add_child(editor)
 
-	var settings := UI.icon_button("Player: " + GameState.player_name(), "user", 56, 22)
+	var settings := UI.icon_button(tr("Player: %s") % GameState.player_name(), "user", 56, 22)
 	settings.pressed.connect(func(): GameState.go(GameState.SCENE_SETTINGS))
 	box.add_child(settings)
 

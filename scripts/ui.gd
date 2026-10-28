@@ -36,7 +36,10 @@ static func theme() -> Theme:
 	for cls in ["OptionButton", "CheckBox", "CheckButton"]:
 		t.set_stylebox("normal", cls, flat(PANEL_LIGHT, 10, 10))
 		t.set_stylebox("hover", cls, flat(PANEL_LIGHT.lightened(0.12), 10, 10))
-		t.set_stylebox("pressed", cls, flat(ACCENT, 10, 10))
+		# A checked box is shown by its check mark, not by an orange fill.
+		var checked_style := flat(ACCENT, 10, 10) if cls == "OptionButton" else flat(PANEL_LIGHT, 10, 10)
+		t.set_stylebox("pressed", cls, checked_style)
+		t.set_stylebox("hover_pressed", cls, flat(PANEL_LIGHT.lightened(0.12), 10, 10))
 		t.set_stylebox("focus", cls, empty())
 		t.set_color("font_color", cls, TEXT)
 		t.set_color("font_hover_color", cls, TEXT)
@@ -81,9 +84,17 @@ static func empty() -> StyleBoxEmpty:
 	return StyleBoxEmpty.new()
 
 
+## Translates a string while keeping the padding spaces some buttons use for width.
+static func t(text: String) -> String:
+	var core := text.strip_edges()
+	if core.is_empty():
+		return text
+	return text.replace(core, TranslationServer.translate(core))
+
+
 static func button(text: String, min_height: float = 56.0, font_size: int = 22) -> Button:
 	var b := Button.new()
-	b.text = text
+	b.text = t(text)
 	b.custom_minimum_size = Vector2(0, min_height)
 	b.add_theme_font_size_override("font_size", font_size)
 	b.focus_mode = Control.FOCUS_NONE
@@ -117,7 +128,13 @@ static func icon_button(text: String, icon_name: String, min_height: float = 44.
 static func _shade(parent: Control) -> ColorRect:
 	var layer := CanvasLayer.new()
 	layer.layer = 100
-	parent.get_tree().root.add_child(layer)
+	# Attach to the scene that owns the parent (its top-most ancestor below the root), so the
+	# dialog disappears together with the scene instead of surviving a scene change.
+	var owner_scene: Node = parent
+	var root := parent.get_tree().root
+	while owner_scene.get_parent() != null and owner_scene.get_parent() != root:
+		owner_scene = owner_scene.get_parent()
+	owner_scene.add_child(layer)
 	var shade := ColorRect.new()
 	shade.color = Color(0, 0, 0, 0.55)
 	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -195,7 +212,7 @@ static func dialog(parent: Control, title_text: String, width: float = 720.0) ->
 
 static func label(text: String, size: int = 20, color: Color = TEXT, wrap: bool = false) -> Label:
 	var l := Label.new()
-	l.text = text
+	l.text = t(text)
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
 	if wrap:
@@ -230,7 +247,7 @@ static func spin(min_v: float, max_v: float, step: float, value: float, suffix: 
 	s.max_value = max_v
 	s.step = step
 	s.value = value
-	s.suffix = suffix
+	s.suffix = t(suffix)
 	s.custom_minimum_size = Vector2(120, 40)
 	s.get_line_edit().add_theme_font_size_override("font_size", 16)
 	return s

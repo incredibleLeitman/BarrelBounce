@@ -109,7 +109,7 @@ func _build_ui() -> void:
 
 	name_edit = LineEdit.new()
 	name_edit.text = str(level.get("name", "My Level"))
-	name_edit.placeholder_text = "Level name"
+	name_edit.placeholder_text = tr("Level name")
 	name_edit.custom_minimum_size = Vector2(180, 44)
 	name_edit.text_changed.connect(func(t):
 		level["name"] = t
@@ -121,7 +121,7 @@ func _build_ui() -> void:
 	top.add_child(add)
 
 	var settings := UI.icon_button("", "gear")
-	settings.tooltip_text = "Level settings (background)"
+	settings.tooltip_text = tr("Level settings (background)")
 	settings.pressed.connect(_show_settings)
 	top.add_child(settings)
 
@@ -132,7 +132,7 @@ func _build_ui() -> void:
 	grid_button = UI.icon_button("", "grid")
 	grid_button.toggle_mode = true
 	grid_button.button_pressed = false
-	grid_button.tooltip_text = "Show the alignment grid"
+	grid_button.tooltip_text = tr("Show the alignment grid")
 	grid_button.toggled.connect(func(on):
 		view.backdrop.show_grid = on
 		view.backdrop.queue_redraw())
@@ -140,7 +140,7 @@ func _build_ui() -> void:
 
 	select_button = UI.icon_button("", "select")
 	select_button.toggle_mode = true
-	select_button.tooltip_text = "Multi-select: tap cannons to add or remove them, drag a rectangle on empty space. Same as holding Ctrl."
+	select_button.tooltip_text = tr("Multi-select: tap cannons to add or remove them, drag a rectangle on empty space. Same as holding Ctrl.")
 	select_button.toggled.connect(func(on): select_mode = on)
 	top.add_child(select_button)
 
@@ -248,9 +248,9 @@ func _build_cannon_inspector() -> void:
 	var header := HBoxContainer.new()
 	inspector_box.add_child(header)
 	if multi:
-		header.add_child(UI.title("%d cannons" % cannons.size(), 28))
+		header.add_child(UI.title(tr("%d cannons") % cannons.size(), 28))
 	else:
-		header.add_child(UI.title("Cannon %d" % (primary() + 1), 28))
+		header.add_child(UI.title(tr("Cannon %d") % (primary() + 1), 28))
 	header.add_child(UI.hspacer_expand())
 	var start := int(level.get("start", 0))
 	var has_start := selection.has(start)
@@ -281,7 +281,7 @@ func _build_cannon_inspector() -> void:
 	var common_type = _common(cannons, "type", "normal")
 	for i in Simulation.TYPE_ORDER.size():
 		var key: String = Simulation.TYPE_ORDER[i]
-		type_opt.add_item(Simulation.TYPES[key]["label"], i)
+		type_opt.add_item(tr(Simulation.TYPES[key]["label"]), i)
 	if common_type == null:
 		type_opt.add_item("", 99)
 		type_opt.select(type_opt.item_count - 1)
@@ -301,7 +301,7 @@ func _build_cannon_inspector() -> void:
 		for c in cannons:
 			c["type"] = Simulation.TYPE_ORDER[i]
 		Simulation.enforce_start_type(level)
-		type_hint.text = Simulation.TYPES[Simulation.TYPE_ORDER[i]]["hint"]
+		type_hint.text = tr(Simulation.TYPES[Simulation.TYPE_ORDER[i]]["hint"])
 		_mark_dirty()
 		view.redraw_all())
 	type_row.add_child(type_opt)
@@ -329,7 +329,7 @@ func _build_cannon_inspector() -> void:
 	if common_angle == null:
 		# Mixed: an empty field; typing a value applies it to every selected cannon.
 		var edit := LineEdit.new()
-		edit.placeholder_text = "mixed"
+		edit.placeholder_text = tr("mixed")
 		edit.custom_minimum_size = Vector2(100, 40)
 		edit.text_submitted.connect(func(t):
 			if t.is_valid_float():
@@ -360,9 +360,9 @@ func _build_cannon_inspector() -> void:
 	bh.add_child(UI.hspacer_expand())
 	var add_opt := OptionButton.new()
 	add_opt.custom_minimum_size.y = 40
-	add_opt.add_item("+ Add…", 0)
+	add_opt.add_item(tr("+ Add…"), 0)
 	for i in Simulation.BEHAVIOR_ORDER.size():
-		add_opt.add_item(Simulation.BEHAVIORS[Simulation.BEHAVIOR_ORDER[i]]["label"], i + 1)
+		add_opt.add_item(tr(Simulation.BEHAVIORS[Simulation.BEHAVIOR_ORDER[i]]["label"]), i + 1)
 	add_opt.item_selected.connect(func(i):
 		if i == 0:
 			return
@@ -389,8 +389,8 @@ func _build_cannon_inspector() -> void:
 				has_step = true
 	if has_step:
 		var pingpong := str(cannons[0].get("seq_mode", "loop")) == "pingpong"
-		var mode_btn := UI.small_button("Sequence: back & forth" if pingpong else "Sequence: loop")
-		mode_btn.tooltip_text = "How the sequence repeats: play it forwards and then backwards, or restart from step 1"
+		var mode_btn := UI.small_button(tr("Sequence: back & forth") if pingpong else tr("Sequence: loop"))
+		mode_btn.tooltip_text = tr("How the sequence repeats: play it forwards and then backwards, or restart from step 1")
 		mode_btn.pressed.connect(func():
 			for c in cannons:
 				c["seq_mode"] = "loop" if pingpong else "pingpong"
@@ -420,7 +420,7 @@ func _build_cannon_inspector() -> void:
 			_build_behavior_row(cannons, bi)
 
 	inspector_box.add_child(UI.spacer(10))
-	var del := UI.icon_button("Delete cannon" if not multi else "Delete %d cannons" % cannons.size(), "trash")
+	var del := UI.icon_button(tr("Delete cannon") if not multi else tr("Delete %d cannons") % cannons.size(), "trash")
 	del.add_theme_color_override("font_color", UI.BAD)
 	del.disabled = level["cannons"].size() - cannons.size() < 1
 	del.pressed.connect(_delete_selection)
@@ -456,7 +456,7 @@ func _build_behavior_row(cannons: Array, bi: int) -> void:
 	head.add_theme_constant_override("separation", 6)
 	box.add_child(head)
 	var mode := UI.icon_button("", "seq" if is_step else "par", 36, 14)
-	mode.tooltip_text = "Step %d of the sequence: click to run it together with the others" % _step_number(cannons[0], bi) if is_step else "Runs together with the other blocks: click to make it a step in a sequence"
+	mode.tooltip_text = tr("Step %d of the sequence: click to run it together with the others") % _step_number(cannons[0], bi) if is_step else tr("Runs together with the other blocks: click to make it a step in a sequence")
 	mode.pressed.connect(func():
 		for c in cannons:
 			var blk: Dictionary = c["behaviors"][bi]
@@ -519,7 +519,7 @@ func _build_behavior_row(cannons: Array, bi: int) -> void:
 		var opt := OptionButton.new()
 		opt.custom_minimum_size.y = 40
 		for i in Simulation.DIR_ORDER.size():
-			opt.add_item(Simulation.DIR_ORDER[i].replace("_", " "), i)
+			opt.add_item(tr(Simulation.DIR_ORDER[i].replace("_", " ")), i)
 			if Simulation.DIR_ORDER[i] == str(b.get("dir", "right")):
 				opt.select(i)
 		opt.item_selected.connect(func(i):
@@ -581,7 +581,7 @@ func _build_path_tools(box: VBoxContainer, cannons: Array, bi: int) -> void:
 	var b: Dictionary = cannons[0]["behaviors"][bi]
 	var count: int = b.get("points", []).size()
 	if cannons.size() > 1:
-		box.add_child(UI.label("%d points · select a single cannon to edit them" % count, 13, UI.MUTED, true))
+		box.add_child(UI.label(tr("%d points · select a single cannon to edit them") % count, 13, UI.MUTED, true))
 		return
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
@@ -602,7 +602,7 @@ func _build_path_tools(box: VBoxContainer, cannons: Array, bi: int) -> void:
 		_params_changed()
 		_rebuild_inspector())
 	row.add_child(undo)
-	box.add_child(UI.label("%d points" % count, 13, UI.MUTED))
+	box.add_child(UI.label(tr("%d points") % count, 13, UI.MUTED))
 	if path_edit == bi:
 		box.add_child(UI.label("Tap in the level to add points, drag a point to move it.", 13, UI.MUTED, true))
 
@@ -638,7 +638,7 @@ func _hit_handle(p: Vector2) -> int:
 
 func _mark_dirty() -> void:
 	dirty = true
-	save_button.text = "  Save •  "
+	save_button.text = tr("  Save •  ")
 
 
 func _params_changed() -> void:
@@ -1001,7 +1001,7 @@ func _show_settings() -> void:
 	for key in Backdrop.THEME_ORDER:
 		var info: Dictionary = Backdrop.THEMES[key]
 		var b := Button.new()
-		b.text = info["label"]
+		b.text = tr(info["label"])
 		b.custom_minimum_size = Vector2(190, 70)
 		b.focus_mode = Control.FOCUS_NONE
 		b.toggle_mode = true
@@ -1027,7 +1027,7 @@ func _show_settings() -> void:
 
 func _toggle_preview() -> void:
 	previewing = not previewing
-	preview_button.text = "  Stop  " if previewing else "  Preview  "
+	preview_button.text = tr("  Stop  ") if previewing else "  Preview  "
 	if not previewing:
 		sim.set_tick(0)
 		view.refresh()
@@ -1038,7 +1038,7 @@ func _physics_process(_delta: float) -> void:
 		sim.set_tick(sim.tick + 1)
 		view.refresh()
 	_update_active_step()
-	tick_label.text = "t = %.2f s" % (sim.tick / float(Simulation.TICK_RATE))
+	tick_label.text = tr("t = %.2f s") % (sim.tick / float(Simulation.TICK_RATE))
 
 
 func _test_play() -> void:
@@ -1052,15 +1052,15 @@ func _save() -> void:
 		level["author"] = GameState.player_name()
 	if GameState.save_user_level(level):
 		dirty = false
-		save_button.text = "  Save  "
+		save_button.text = tr("  Save  ")
 		var id := str(level["id"])
 		var rev := GameState.level_hash(level)
 		if GameState.best_is_stale(id, rev):
-			UI.toast(UI.root_of(ui), "Saved “%s”. The level changed, so its best time was reset. Finish it to share it." % str(level.get("name", "")), UI.ACCENT)
+			UI.toast(UI.root_of(ui), tr("Saved “%s”. The level changed, so its best time was reset. Finish it to share it.") % str(level.get("name", "")), UI.ACCENT)
 		elif not GameState.is_verified(level):
-			UI.toast(UI.root_of(ui), "Saved “%s”. Finish it once (Test) to make it shareable." % str(level.get("name", "")), UI.GOOD)
+			UI.toast(UI.root_of(ui), tr("Saved “%s”. Finish it once (Test) to make it shareable.") % str(level.get("name", "")), UI.GOOD)
 		else:
-			UI.toast(UI.root_of(ui), "Saved “%s”" % str(level.get("name", "")), UI.GOOD)
+			UI.toast(UI.root_of(ui), tr("Saved “%s”") % str(level.get("name", "")), UI.GOOD)
 	else:
 		UI.toast(UI.root_of(ui), "Could not save level", UI.BAD)
 

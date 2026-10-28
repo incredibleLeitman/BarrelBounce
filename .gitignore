@@ -1,6 +1,7 @@
 # Godot
 .godot/
 *.import
+*.translation
 export/
 *.tmp
 # Server credentials
