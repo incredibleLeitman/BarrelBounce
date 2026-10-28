@@ -21,9 +21,12 @@ func _init(cannon_data: Dictionary) -> void:
 
 
 func apply_state(state: Dictionary, is_occupied: bool, fuse_left: float = 1.0) -> void:
+	var moved: bool = position != state["pos"]
 	position = state["pos"]
 	var ang := float(state["angle"])
-	if ang != barrel_angle or is_occupied != occupied or fuse_left != fuse:
+	# Hints are drawn relative to the node, so a cannon that moves must redraw them or they
+	# would ride along with it instead of staying at the stored base position.
+	if ang != barrel_angle or is_occupied != occupied or fuse_left != fuse or (moved and show_hints):
 		barrel_angle = ang
 		occupied = is_occupied
 		fuse = fuse_left

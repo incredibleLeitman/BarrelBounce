@@ -103,4 +103,27 @@ const LEVELS := [
 		"finish": {"x": 1150.0, "y": 100.0, "w": 60.0, "h": 500.0},
 		"start": 0,
 	},
+	{
+		"format": 1, "id": "builtin_10", "name": "The Long Haul", "author": "BarrelBounce",
+		"width": 3400.0, "height": 900.0, "background": "sunset",
+		"cannons": [
+			{"x": 150.0, "y": 800.0, "angle": -45.0, "type": "normal", "behaviors": []},
+			{"x": 560.0, "y": 650.0, "angle": -45.0, "type": "strong", "behaviors": [
+				{"type": "sweep", "from": -25.0, "to": 25.0, "period": 4.0}]},
+			{"x": 1050.0, "y": 350.0, "angle": -10.0, "type": "double", "behaviors": []},
+			{"x": 1750.0, "y": 420.0, "angle": -60.0, "type": "bubble", "behaviors": [
+				{"type": "move", "dir": "up", "range": 150.0, "period": 4.0}]},
+			{"x": 2050.0, "y": 60.0, "angle": 30.0, "type": "dash", "behaviors": [
+				{"type": "sweep", "from": -20.0, "to": 20.0, "period": 2.0}]},
+			{"x": 2500.0, "y": 480.0, "angle": -45.0, "type": "normal", "behaviors": [
+				{"type": "move", "dir": "up", "range": 150.0, "period": 2.0, "seq": true, "duration": 1.0},
+				{"type": "move", "dir": "right", "range": 150.0, "period": 2.0, "seq": true, "duration": 1.0},
+				{"type": "move", "dir": "down", "range": 150.0, "period": 2.0, "seq": true, "duration": 1.0},
+				{"type": "move", "dir": "left", "range": 150.0, "period": 2.0, "seq": true, "duration": 1.0}]},
+			{"x": 2950.0, "y": 300.0, "angle": -75.0, "type": "auto", "behaviors": [
+				{"type": "rotate", "speed": 90.0}]},
+		],
+		"finish": {"x": 3250.0, "y": 100.0, "w": 60.0, "h": 600.0},
+		"start": 0,
+	},
 ]

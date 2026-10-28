@@ -407,7 +407,25 @@ func set_tick(t: int) -> void:
 		pos = cannon_states[cannon_index]["pos"]
 
 
+## Optional memo of cannon states by tick phase, for search tools that step millions of
+## ticks on an unchanging level. Never enable it while a level is being edited.
+var cache_period := 0
+var state_cache: Dictionary = {}
+
+
 func _update_cannons() -> void:
+	if cache_period > 0:
+		var key := tick % cache_period
+		if state_cache.has(key):
+			cannon_states = state_cache[key]
+			return
+		var states: Array = []
+		states.resize(cannons.size())
+		for i in cannons.size():
+			states[i] = cannon_state_at(cannons[i], tick)
+		state_cache[key] = states
+		cannon_states = states
+		return
 	cannon_states.resize(cannons.size())
 	for i in cannons.size():
 		cannon_states[i] = cannon_state_at(cannons[i], tick)
@@ -531,7 +549,9 @@ func clone() -> Simulation:
 	s.cooldown_cannon = cooldown_cannon
 	s.finish_ticks = finish_ticks
 	s.launches = launches
-	s.cannon_states = cannon_states.duplicate()
+	s.cache_period = cache_period
+	s.state_cache = state_cache   # shared on purpose: the memo is valid for every clone
+	s.cannon_states = cannon_states if cache_period > 0 else cannon_states.duplicate()
 	return s
 
 

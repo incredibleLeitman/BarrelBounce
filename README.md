@@ -146,6 +146,7 @@ Open the folder in Godot 4.3 and press Play. Headless checks:
 godot --headless --import                            # build the script class cache (once)
 godot --headless -s tools/solve_levels.gd -- 60      # solve every built-in level (60 s budget each)
 godot --headless -s tools/solve_levels.gd -- 60 3    # only level index 3
+godot --headless -s tools/check_hops.gd -- 9         # per hop: closest approach to the next cannon
 godot --headless res://tools/smoke_test.tscn         # play a level, round-trip the editor, list levels
 xvfb-run godot --path . res://tools/screenshots.tscn # PNG of every scene into user://screenshots/
 ```

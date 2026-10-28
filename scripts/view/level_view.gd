@@ -20,6 +20,7 @@ func _ready() -> void:
 	finish_node = FinishNode.new()
 	add_child(finish_node)
 	player_node = PlayerNode.new()
+	player_node.z_index = 2   # above every cannon, selected ones included
 	add_child(player_node)
 	center_in_viewport()
 	get_viewport().size_changed.connect(center_in_viewport)

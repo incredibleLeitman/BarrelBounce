@@ -10,7 +10,7 @@ extends SceneTree
 const SimulationScript := preload("res://scripts/simulation.gd")
 const LevelsScript := preload("res://levels/builtin_levels.gd")
 
-const MAX_TICKS := 1800          # give up on runs longer than 30 s
+const MAX_TICKS := 2400          # give up on runs longer than 40 s
 const WAIT_STEP := 2             # granularity (ticks) for "wait, then fire"
 const FLIGHT_CAP := 420          # longest flight we simulate before declaring it lost
 
@@ -50,9 +50,25 @@ func solve(level: Dictionary, max_seconds: float) -> Dictionary:
 	var best := {}
 	var qi := 0
 	# Waiting matters whenever *anything* in the level moves, not just the cannon we sit in.
+	# Everything repeats after the least common multiple of the cannon cycles, so two states
+	# in the same cannon at the same phase of that cycle are the same state.
 	var level_cycle := 0
+	var phase := 1
 	for c in level["cannons"]:
-		level_cycle = maxi(level_cycle, SimulationScript.cannon_cycle_ticks(c))
+		var cyc := SimulationScript.cannon_cycle_ticks(c)
+		level_cycle = maxi(level_cycle, cyc)
+		if cyc > 0:
+			phase = phase * cyc / _gcd(phase, cyc)
+	if phase > MAX_TICKS:
+		phase = 0   # no useful periodicity: fall back to raw ticks
+	# Cannon states are pure functions of the phase: memoise them for the whole search.
+	start.cache_period = phase if phase > 0 else MAX_TICKS
+	start.state_cache = {}
+	start.reset()
+	# A ball below every cannon and the gate, still falling, can only die: stop early.
+	var lowest := start.finish_rect().end.y
+	for c in level["cannons"]:
+		lowest = maxf(lowest, float(c.get("y", 0.0)) + 400.0)
 	while qi < queue.size():
 		if Time.get_ticks_msec() > deadline:
 			break
@@ -96,11 +112,13 @@ func solve(level: Dictionary, max_seconds: float) -> Dictionary:
 					f.step(tap)
 					if flight > FLIGHT_CAP:
 						break
+					if f.pos.y > lowest and f.vel.y > 0.0 and f.extra_jumps == 0:
+						break
 				if f.mode == SimulationScript.Mode.FINISHED:
 					if best.is_empty() or f.finish_ticks < best["ticks"]:
 						best = {"ticks": f.finish_ticks, "taps": ftaps}
 				elif f.mode == SimulationScript.Mode.IN_CANNON and f.tick < MAX_TICKS:
-					var key: int = f.cannon_index * 100000 + f.tick
+					var key: int = f.cannon_index * 100000 + (f.tick % phase if phase > 0 else f.tick)
 					if not visited.has(key):
 						visited[key] = true
 						queue.append({"sim": f, "taps": ftaps})
@@ -108,3 +126,11 @@ func solve(level: Dictionary, max_seconds: float) -> Dictionary:
 			if max_wait == 0:
 				break
 	return best
+
+
+func _gcd(a: int, b: int) -> int:
+	while b != 0:
+		var t := a % b
+		a = b
+		b = t
+	return a
