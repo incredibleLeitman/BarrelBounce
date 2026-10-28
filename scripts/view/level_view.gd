@@ -71,9 +71,12 @@ func refresh() -> void:
 		return
 	for i in cannon_nodes.size():
 		var occupied := sim.mode == Simulation.Mode.IN_CANNON and sim.cannon_index == i
-		cannon_nodes[i].apply_state(sim.cannon_states[i], occupied)
+		cannon_nodes[i].apply_state(sim.cannon_states[i], occupied, sim.fuse_left(i))
 	finish_node.set_rect(sim.finish_rect())
 	player_node.update_from(sim)
+	var bg := str(sim.level.get("background", "space"))
+	if bg != backdrop.theme_name:
+		backdrop.theme_name = bg
 
 
 func set_selection(cannon_index: int, finish_selected: bool) -> void:

@@ -21,7 +21,10 @@ const BASE_SIZE := Vector2(1280, 720)
 ## Leaving this rectangle kills the player (and resets the run).
 const WORLD := Rect2(-80.0, -640.0, 1440.0, 1440.0)
 
-enum Mode { IN_CANNON, FLYING, DASHING, FINISHED, DEAD }
+enum Mode { IN_CANNON, FLYING, FINISHED, DEAD }
+
+## The start cannon is always a plain cannon: a level must never fire without the player's tap.
+const START_TYPE := "normal"
 
 ## Cannon (barrel) types. "power" is the launch speed in px/s.
 const TYPES := {
@@ -31,15 +34,15 @@ const TYPES := {
 		"hint": "Much more power, much longer flight."},
 	"weak": {"label": "Pea Shooter", "power": 620.0, "color": Color("#9bd36a"), "barrel": 14.0,
 		"hint": "Short, gentle hops."},
-	"dash": {"label": "Blink", "power": 650.0, "dash_speed": 2800.0, "dash_ticks": 9,
+	"dash": {"label": "Blink", "power": 650.0, "teleport": 210.0,
 		"color": Color("#4cc9f0"), "barrel": 20.0,
-		"hint": "Zips in a straight line ignoring gravity, then drops."},
+		"hint": "Teleports the ball 210 px along the barrel, then it flies on."},
 	"double": {"label": "Hopper", "power": 950.0, "jumps": 1, "color": Color("#f6d55c"), "barrel": 22.0,
 		"hint": "Tap again in the air for one extra boost."},
 	"bubble": {"label": "Bubble", "power": 820.0, "gravity": 0.35, "color": Color("#c77dff"), "barrel": 22.0,
 		"hint": "The ball floats under reduced gravity."},
 	"auto": {"label": "Hot Head", "power": 950.0, "auto_fire_ticks": 45, "color": Color("#ff6fb5"), "barrel": 22.0,
-		"hint": "Fires by itself after 0.75 s. Tap earlier if you dare."},
+		"hint": "Its fuse burns down in 0.75 s and then it fires by itself. Tap earlier if you dare."},
 }
 const TYPE_ORDER := ["normal", "strong", "weak", "dash", "double", "bubble", "auto"]
 
@@ -78,15 +81,15 @@ var cannon_index: int = 0
 var ticks_in_cannon: int = 0
 var pos: Vector2 = Vector2.ZERO
 var vel: Vector2 = Vector2.ZERO
-var dash_ticks_left: int = 0
-var post_dash_speed: float = 0.0
+## Where the last teleport started (for the blink effect), set together with the "teleport" event.
+var teleport_from: Vector2 = Vector2.ZERO
 var extra_jumps: int = 0
 var gravity_scale: float = 1.0
 var cooldown: int = 0
 var cooldown_cannon: int = -1
 var finish_ticks: int = -1
 var launches: int = 0
-## Events produced by the last [method step]: "launch", "jump", "catch", "finish", "die".
+## Events produced by the last [method step]: "launch", "teleport", "jump", "catch", "finish", "die".
 var events: Array = []
 
 
@@ -150,6 +153,22 @@ static func cannon_cycle_ticks(c: Dictionary) -> int:
 	return int(ceil(cycle * TICK_RATE))
 
 
+## Forces the start cannon to the plain type so no level can fire without a tap.
+static func enforce_start_type(level_data: Dictionary) -> void:
+	var cs: Array = level_data.get("cannons", [])
+	var start := int(level_data.get("start", 0))
+	if start >= 0 and start < cs.size():
+		cs[start]["type"] = START_TYPE
+
+
+## 0..1 fraction of the fuse still left on an auto cannon the ball sits in (1 when idle).
+func fuse_left(index: int) -> float:
+	var auto_ticks := int(cannon_type(index).get("auto_fire_ticks", 0))
+	if auto_ticks <= 0 or mode != Mode.IN_CANNON or cannon_index != index:
+		return 1.0
+	return clampf(1.0 - float(ticks_in_cannon) / float(auto_ticks), 0.0, 1.0)
+
+
 func finish_rect() -> Rect2:
 	var f: Dictionary = level.get("finish", {"x": 1100.0, "y": 160.0, "w": 60.0, "h": 400.0})
 	return Rect2(float(f.get("x", 0.0)), float(f.get("y", 0.0)), float(f.get("w", 60.0)), float(f.get("h", 400.0)))
@@ -162,7 +181,7 @@ func reset() -> void:
 	cannon_index = clampi(int(level.get("start", 0)), 0, maxi(0, cannons.size() - 1))
 	ticks_in_cannon = 0
 	vel = Vector2.ZERO
-	dash_ticks_left = 0
+	teleport_from = Vector2.ZERO
 	extra_jumps = 0
 	gravity_scale = 1.0
 	cooldown = 0
@@ -207,26 +226,19 @@ func step(fire: bool) -> void:
 			var auto_ticks := int(cannon_type(cannon_index).get("auto_fire_ticks", 0))
 			if fire or (auto_ticks > 0 and ticks_in_cannon >= auto_ticks):
 				_launch()
-		Mode.FLYING, Mode.DASHING:
-			if fire and mode == Mode.FLYING and extra_jumps > 0:
+		Mode.FLYING:
+			if fire and extra_jumps > 0:
 				extra_jumps -= 1
 				vel.y = DOUBLE_JUMP_VEL
 				events.append("jump")
-			if mode == Mode.DASHING:
-				pos += vel * DT
-				dash_ticks_left -= 1
-				if dash_ticks_left <= 0:
-					mode = Mode.FLYING
-					vel = vel.normalized() * post_dash_speed
-			else:
-				vel.y += GRAVITY * gravity_scale * DT
-				pos += vel * DT
+			vel.y += GRAVITY * gravity_scale * DT
+			pos += vel * DT
 			if cooldown > 0:
 				cooldown -= 1
 			_check_catch()
-			if mode == Mode.FLYING or mode == Mode.DASHING:
+			if mode == Mode.FLYING:
 				_check_finish()
-			if mode == Mode.FLYING or mode == Mode.DASHING:
+			if mode == Mode.FLYING:
 				_check_death()
 
 
@@ -242,15 +254,14 @@ func _launch() -> void:
 	extra_jumps = int(info.get("jumps", 0))
 	gravity_scale = float(info.get("gravity", 1.0))
 	pos = state["pos"] + dir * 24.0
-	if info.has("dash_speed"):
-		mode = Mode.DASHING
-		vel = dir * float(info["dash_speed"])
-		dash_ticks_left = int(info["dash_ticks"])
-		post_dash_speed = float(info["power"])
-	else:
-		mode = Mode.FLYING
-		vel = dir * float(info["power"])
+	mode = Mode.FLYING
+	vel = dir * float(info["power"])
 	events.append("launch")
+	if info.has("teleport"):
+		# Blink: the ball vanishes at the muzzle and reappears further along the barrel line.
+		teleport_from = pos
+		pos += dir * float(info["teleport"])
+		events.append("teleport")
 
 
 func _check_catch() -> void:
@@ -312,8 +323,7 @@ func clone() -> Simulation:
 	s.ticks_in_cannon = ticks_in_cannon
 	s.pos = pos
 	s.vel = vel
-	s.dash_ticks_left = dash_ticks_left
-	s.post_dash_speed = post_dash_speed
+	s.teleport_from = teleport_from
 	s.extra_jumps = extra_jumps
 	s.gravity_scale = gravity_scale
 	s.cooldown = cooldown

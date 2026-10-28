@@ -103,6 +103,89 @@ static func small_button(text: String) -> Button:
 	return button(text, 44.0, 18)
 
 
+## Button with one of the line icons from assets/icons (24 px, white).
+static func icon_button(text: String, icon_name: String, min_height: float = 44.0, font_size: int = 18) -> Button:
+	var b := button(text, min_height, font_size)
+	b.icon = load("res://assets/icons/%s.svg" % icon_name)
+	b.expand_icon = false
+	b.add_theme_constant_override("h_separation", 8 if text.strip_edges() != "" else 0)
+	return b
+
+
+## Modal dialog with a title, a message and Yes / No buttons. [param on_yes] runs on confirm.
+static func confirm(parent: Control, title_text: String, message: String, yes_text: String, on_yes: Callable) -> void:
+	var shade := ColorRect.new()
+	shade.color = Color(0, 0, 0, 0.55)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	parent.add_child(shade)
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	shade.add_child(panel)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(420, 0)
+	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
+	var t := title(title_text, 32)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(t)
+	var m := label(message, 18, MUTED)
+	m.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	m.autowrap_mode = TextServer.AUTOWRAP_WORD
+	box.add_child(m)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	box.add_child(row)
+	var no := button("Cancel")
+	no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	no.pressed.connect(shade.queue_free)
+	row.add_child(no)
+	var yes := accent_button(yes_text, 56, 22)
+	yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	yes.pressed.connect(func():
+		shade.queue_free()
+		on_yes.call())
+	row.add_child(yes)
+
+
+## Modal panel with a close button; returns the VBox to fill with content.
+static func dialog(parent: Control, title_text: String, width: float = 720.0) -> VBoxContainer:
+	var shade := ColorRect.new()
+	shade.color = Color(0, 0, 0, 0.55)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	parent.add_child(shade)
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	shade.add_child(panel)
+	var outer := VBoxContainer.new()
+	outer.custom_minimum_size = Vector2(width, 0)
+	outer.add_theme_constant_override("separation", 10)
+	panel.add_child(outer)
+	var head := HBoxContainer.new()
+	outer.add_child(head)
+	head.add_child(title(title_text, 32))
+	head.add_child(hspacer_expand())
+	var close := small_button("  Close  ")
+	close.pressed.connect(shade.queue_free)
+	head.add_child(close)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(width, 0)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	outer.add_child(scroll)
+	var body := VBoxContainer.new()
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 8)
+	scroll.add_child(body)
+	# Keep the dialog inside the screen on short displays.
+	scroll.custom_minimum_size.y = minf(520.0, parent.size.y - 140.0)
+	return body
+
+
 static func label(text: String, size: int = 20, color: Color = TEXT) -> Label:
 	var l := Label.new()
 	l.text = text

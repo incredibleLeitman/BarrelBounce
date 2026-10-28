@@ -1,6 +1,6 @@
 class_name FinishNode
 extends Node2D
-## The finish zone: a glowing gate with a checkered flag on top.
+## The finish gate: a calm outline with rings that pulse inwards, and a checkered flag on top.
 
 var rect := Rect2(1100, 160, 60, 400)
 var selected := false
@@ -19,15 +19,17 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	var glow := 0.18 + 0.06 * sin(t * 3.0)
-	draw_rect(rect, Color(UI.GOOD, glow))
+	draw_rect(rect, Color(UI.GOOD, 0.12))
+	# Rings travelling from the border towards the centre, fading as they go.
+	var half := minf(rect.size.x, rect.size.y) * 0.5
+	for k in 3:
+		var phase := fmod(t * 0.6 + k / 3.0, 1.0)
+		var inset := phase * half
+		var inner := rect.grow(-inset)
+		if inner.size.x > 2.0 and inner.size.y > 2.0:
+			draw_rect(inner, Color(UI.GOOD, 0.55 * (1.0 - phase)), false, 2.0)
 	draw_rect(rect, Color(UI.GOOD, 0.9), false, 3.0)
-	# Horizontal stripes inside the gate
-	var y := rect.position.y + 12.0 + fmod(t * 40.0, 24.0)
-	while y < rect.end.y - 4.0:
-		draw_line(Vector2(rect.position.x + 4, y), Vector2(rect.end.x - 4, y), Color(UI.GOOD, 0.25), 2.0)
-		y += 24.0
-	# Flag pole and checkered flag at the top-left corner
+	# Flag pole and checkered flag at the top-left corner.
 	var pole_top := rect.position + Vector2(0, -48)
 	draw_line(rect.position, pole_top, Color("#dfe6f5"), 4.0)
 	var sq := 8.0

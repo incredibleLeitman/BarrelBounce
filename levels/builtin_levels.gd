@@ -49,7 +49,7 @@ const LEVELS := [
 			{"x": 120.0, "y": 620.0, "angle": -50.0, "type": "weak", "behaviors": []},
 			{"x": 260.0, "y": 520.0, "angle": -10.0, "type": "dash", "behaviors": [
 				{"type": "sweep", "from": -30.0, "to": 30.0, "period": 2.0}]},
-			{"x": 900.0, "y": 480.0, "angle": -35.0, "type": "normal", "behaviors": []},
+			{"x": 820.0, "y": 540.0, "angle": -35.0, "type": "normal", "behaviors": []},
 		],
 		"finish": {"x": 1150.0, "y": 100.0, "w": 60.0, "h": 560.0},
 		"start": 0,
@@ -67,14 +67,14 @@ const LEVELS := [
 	{
 		"format": 1, "id": "builtin_07", "name": "Hot Heads", "author": "BarrelBounce",
 		"cannons": [
-			{"x": 140.0, "y": 600.0, "angle": 0.0, "type": "auto", "behaviors": [
+			{"x": 140.0, "y": 600.0, "angle": 0.0, "type": "normal", "behaviors": [
 				{"type": "rotate", "speed": -120.0}]},
 			{"x": 400.0, "y": 500.0, "angle": -30.0, "type": "auto", "behaviors": [
 				{"type": "move", "dir": "right", "range": 300.0, "period": 2.5}]},
 			{"x": 1000.0, "y": 440.0, "angle": -100.0, "type": "bubble", "behaviors": [
 				{"type": "sweep", "from": -40.0, "to": 40.0, "period": 1.5}]},
 		],
-		"finish": {"x": 600.0, "y": 110.0, "w": 240.0, "h": 50.0},
+		"finish": {"x": 600.0, "y": 160.0, "w": 240.0, "h": 50.0},
 		"start": 0,
 	},
 	{

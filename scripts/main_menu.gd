@@ -1,6 +1,6 @@
 extends Node2D
-## Main menu: title, Start (-> level select), Level editor, Quit. A little demo level
-## plays itself in the background so the menu is never static.
+## Main menu: Start (-> level select), Level editor, Player settings, How to play, Exit.
+## A little demo level plays itself in the background so the menu is never static.
 
 var view: LevelView
 var sim: Simulation
@@ -27,7 +27,7 @@ func _build_ui() -> void:
 	box.set_anchors_preset(Control.PRESET_CENTER)
 	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	box.grow_vertical = Control.GROW_DIRECTION_BOTH
-	box.add_theme_constant_override("separation", 14)
+	box.add_theme_constant_override("separation", 12)
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	root.add_child(box)
 
@@ -38,22 +38,32 @@ func _build_ui() -> void:
 	var sub := UI.label("one button · one ball · many barrels", 22, UI.MUTED)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sub)
-	box.add_child(UI.spacer(24))
+	box.add_child(UI.spacer(20))
 
 	var start := UI.accent_button("Start", 72, 30)
 	start.custom_minimum_size = Vector2(320, 72)
 	start.pressed.connect(func(): GameState.go(GameState.SCENE_SELECT))
 	box.add_child(start)
 
-	var editor := UI.button("Level editor")
+	var editor := UI.icon_button("Level editor", "pen", 56, 22)
 	editor.pressed.connect(func():
 		GameState.editor_level = GameState.new_level()
 		GameState.go(GameState.SCENE_EDITOR))
 	box.add_child(editor)
 
-	if not GameState.is_mobile and not OS.has_feature("web"):
-		var quit := UI.button("Quit")
-		quit.pressed.connect(func(): get_tree().quit())
+	var settings := UI.icon_button("Player: " + GameState.player_name(), "user", 56, 22)
+	settings.pressed.connect(func(): GameState.go(GameState.SCENE_SETTINGS))
+	box.add_child(settings)
+
+	var help := UI.icon_button("How to play", "help", 56, 22)
+	help.pressed.connect(func(): HelpDialog.show(root))
+	box.add_child(help)
+
+	# Browsers do not let a page close itself, so the web build has no Exit button.
+	if not OS.has_feature("web"):
+		var quit := UI.icon_button("Exit", "exit", 56, 22)
+		quit.pressed.connect(func():
+			UI.confirm(root, "Exit BarrelBounce?", "Your levels and best times are saved.", "Exit", func(): get_tree().quit()))
 		box.add_child(quit)
 
 	# Title bob

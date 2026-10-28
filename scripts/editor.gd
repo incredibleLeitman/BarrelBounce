@@ -4,6 +4,10 @@ extends Node2D
 
 const GRID := 10.0
 const PICK_RADIUS := 40.0
+const EDGE_GRAB := 12.0      # distance (level px) from a gate edge that grabs it for resizing
+const MIN_GATE := 20.0
+
+enum Drag { NONE, MOVE, LEFT, RIGHT, TOP, BOTTOM }
 
 var level: Dictionary
 var sim: Simulation
@@ -13,7 +17,9 @@ var dirty := false
 var selected := -1          # cannon index, -1 = none
 var finish_selected := false
 var dragging := false
+var drag_mode: int = Drag.NONE
 var drag_offset := Vector2.ZERO
+var drag_anchor := Rect2()  # gate rect when a resize drag started
 var previewing := false
 
 var ui: CanvasLayer
@@ -73,6 +79,14 @@ func _build_ui() -> void:
 	add.pressed.connect(_add_cannon)
 	top.add_child(add)
 
+	var settings := UI.icon_button("Settings", "gear")
+	settings.pressed.connect(_show_settings)
+	top.add_child(settings)
+
+	var help := UI.icon_button("", "help")
+	help.pressed.connect(func(): HelpDialog.show(root))
+	top.add_child(help)
+
 	top.add_child(UI.hspacer_expand())
 
 	tick_label = UI.label("t = 0.00 s", 16, UI.MUTED)
@@ -105,11 +119,12 @@ func _build_ui() -> void:
 	inspector_box.add_theme_constant_override("separation", 8)
 	scroll.add_child(inspector_box)
 
-	var hint := UI.label("Drag things to move them · tap a cannon or the gate to edit it", 15, UI.MUTED)
+	var hint := UI.label("Drag things to move them · drag a gate edge to resize it · tap to edit", 15, UI.MUTED)
+	hint.add_theme_stylebox_override("normal", UI.flat(Color(UI.BG_DEEP, 0.75), 10, 6))
 	hint.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	hint.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	hint.offset_left = 16
-	hint.offset_top = -40
+	hint.offset_top = -44
 	hint.offset_bottom = -12
 	root.add_child(hint)
 
@@ -155,16 +170,18 @@ func _build_cannon_inspector(c: Dictionary) -> void:
 	inspector_box.add_child(header)
 	header.add_child(UI.title("Cannon %d" % (selected + 1), 28))
 	header.add_child(UI.hspacer_expand())
-	if selected == int(level.get("start", 0)):
+	var is_start := selected == int(level.get("start", 0))
+	if is_start:
 		header.add_child(UI.label("START", 14, UI.GOOD))
 	else:
 		var mk := UI.small_button(" Make start ")
 		mk.pressed.connect(func():
 			level["start"] = selected
+			Simulation.enforce_start_type(level)
 			_structure_changed())
 		header.add_child(mk)
 
-	# Type
+	# Type (locked for the start cannon: a level must never fire without a tap)
 	var type_row := HBoxContainer.new()
 	type_row.add_theme_constant_override("separation", 10)
 	inspector_box.add_child(type_row)
@@ -172,12 +189,16 @@ func _build_cannon_inspector(c: Dictionary) -> void:
 	var type_opt := OptionButton.new()
 	type_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	type_opt.custom_minimum_size.y = 40
+	type_opt.disabled = is_start
 	for i in Simulation.TYPE_ORDER.size():
 		var key: String = Simulation.TYPE_ORDER[i]
 		type_opt.add_item(Simulation.TYPES[key]["label"], i)
 		if key == str(c.get("type", "normal")):
 			type_opt.select(i)
-	var type_hint := UI.label(Simulation.type_info(str(c.get("type", "normal")))["hint"], 14, UI.MUTED)
+	var hint_text: String = Simulation.type_info(str(c.get("type", "normal")))["hint"]
+	if is_start:
+		hint_text = "The start cannon is always a plain cannon so the level only begins with your tap."
+	var type_hint := UI.label(hint_text, 14, UI.MUTED)
 	type_hint.autowrap_mode = TextServer.AUTOWRAP_WORD
 	type_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	type_opt.item_selected.connect(func(i):
@@ -247,16 +268,25 @@ func _build_cannon_inspector(c: Dictionary) -> void:
 		_build_behavior_row(c, bi)
 
 	inspector_box.add_child(UI.spacer(10))
-	var del := UI.button("Delete cannon", 44, 18)
+	var del := UI.icon_button("Delete cannon", "trash")
 	del.add_theme_color_override("font_color", UI.BAD)
 	del.disabled = level["cannons"].size() <= 1
-	del.pressed.connect(func():
-		level["cannons"].remove_at(selected)
-		if int(level.get("start", 0)) >= level["cannons"].size():
-			level["start"] = 0
-		selected = -1
-		_structure_changed())
+	del.pressed.connect(func(): _delete_cannon(selected))
 	inspector_box.add_child(del)
+
+
+func _delete_cannon(index: int) -> void:
+	if index < 0 or level["cannons"].size() <= 1:
+		return
+	level["cannons"].remove_at(index)
+	var start := int(level.get("start", 0))
+	if start == index or start >= level["cannons"].size():
+		level["start"] = 0
+	elif start > index:
+		level["start"] = start - 1
+	Simulation.enforce_start_type(level)
+	selected = -1
+	_structure_changed()
 
 
 func _build_behavior_row(c: Dictionary, bi: int) -> void:
@@ -370,19 +400,26 @@ func _unhandled_input(event: InputEvent) -> void:
 			_pick(view.world_mouse())
 		else:
 			dragging = false
-	elif event is InputEventMouseMotion and dragging:
-		_drag_to(view.world_mouse())
+			drag_mode = Drag.NONE
+			_update_cursor(view.world_mouse())
+	elif event is InputEventMouseMotion:
+		if dragging:
+			_drag_to(view.world_mouse())
+		else:
+			_update_cursor(view.world_mouse())
 	elif event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE:
 			_on_back()
-		elif event.keycode == KEY_DELETE and selected >= 0 and level["cannons"].size() > 1:
-			level["cannons"].remove_at(selected)
-			selected = -1
-			_structure_changed()
+		elif event.keycode == KEY_DELETE:
+			_delete_cannon(selected)
 
 
-func _pick(p: Vector2) -> void:
-	# Cannons are picked at their *current* (animated) position.
+func _exit_tree() -> void:
+	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+
+
+## What a press at level point [param p] would grab: a cannon index, or a gate drag mode.
+func _hit_cannon(p: Vector2) -> int:
 	var best := -1
 	var best_d := PICK_RADIUS * PICK_RADIUS
 	for i in sim.cannon_states.size():
@@ -390,31 +427,100 @@ func _pick(p: Vector2) -> void:
 		if d < best_d:
 			best_d = d
 			best = i
+	return best
+
+
+func _hit_gate(p: Vector2) -> int:
+	var r := sim.finish_rect()
+	if not r.grow(EDGE_GRAB).has_point(p):
+		return Drag.NONE
+	# Edges win over the interior so even a thin gate can be resized.
+	var dl := absf(p.x - r.position.x)
+	var dr := absf(p.x - r.end.x)
+	var dt := absf(p.y - r.position.y)
+	var db := absf(p.y - r.end.y)
+	var m := minf(minf(dl, dr), minf(dt, db))
+	if m <= EDGE_GRAB:
+		if m == dl: return Drag.LEFT
+		if m == dr: return Drag.RIGHT
+		if m == dt: return Drag.TOP
+		return Drag.BOTTOM
+	return Drag.MOVE
+
+
+func _update_cursor(p: Vector2) -> void:
+	var shape := Input.CURSOR_ARROW
+	if dragging:
+		shape = _cursor_for(drag_mode)
+	elif _hit_cannon(p) >= 0:
+		shape = Input.CURSOR_MOVE
+	else:
+		shape = _cursor_for(_hit_gate(p))
+	Input.set_default_cursor_shape(shape)
+
+
+func _cursor_for(mode: int) -> Input.CursorShape:
+	match mode:
+		Drag.MOVE: return Input.CURSOR_MOVE
+		Drag.LEFT, Drag.RIGHT: return Input.CURSOR_HSIZE
+		Drag.TOP, Drag.BOTTOM: return Input.CURSOR_VSIZE
+	return Input.CURSOR_ARROW
+
+
+func _pick(p: Vector2) -> void:
+	# Cannons are picked at their *current* (animated) position.
+	var best := _hit_cannon(p)
 	if best >= 0:
 		_select_cannon(best)
 		dragging = true
+		drag_mode = Drag.MOVE
 		var c: Dictionary = level["cannons"][best]
 		drag_offset = Vector2(float(c["x"]), float(c["y"])) - sim.cannon_states[best]["pos"]
+		_update_cursor(p)
 		return
-	if sim.finish_rect().grow(10).has_point(p):
+	var gate := _hit_gate(p)
+	if gate != Drag.NONE:
 		_select_finish()
 		dragging = true
-		drag_offset = sim.finish_rect().position - p
+		drag_mode = gate
+		drag_anchor = sim.finish_rect()
+		drag_offset = drag_anchor.position - p
+		_update_cursor(p)
 		return
 	selected = -1
 	finish_selected = false
 	dragging = false
+	drag_mode = Drag.NONE
 	view.set_selection(-1, false)
 	_rebuild_inspector()
 
 
 func _drag_to(p: Vector2) -> void:
-	var target := (p + drag_offset).snapped(Vector2(GRID, GRID))
+	var snapped_p := p.snapped(Vector2(GRID, GRID))
 	if finish_selected:
 		var f: Dictionary = level["finish"]
-		f["x"] = clampf(target.x, 0.0, Simulation.BASE_SIZE.x - float(f.get("w", 60.0)))
-		f["y"] = clampf(target.y, 0.0, Simulation.BASE_SIZE.y - float(f.get("h", 400.0)))
+		var a := drag_anchor
+		match drag_mode:
+			Drag.MOVE:
+				var target := (p + drag_offset).snapped(Vector2(GRID, GRID))
+				f["x"] = clampf(target.x, 0.0, Simulation.BASE_SIZE.x - a.size.x)
+				f["y"] = clampf(target.y, 0.0, Simulation.BASE_SIZE.y - a.size.y)
+			Drag.LEFT:
+				var x := clampf(snapped_p.x, 0.0, a.end.x - MIN_GATE)
+				f["x"] = x
+				f["w"] = a.end.x - x
+			Drag.RIGHT:
+				f["w"] = clampf(snapped_p.x, a.position.x + MIN_GATE, Simulation.BASE_SIZE.x) - a.position.x
+			Drag.TOP:
+				var y := clampf(snapped_p.y, 0.0, a.end.y - MIN_GATE)
+				f["y"] = y
+				f["h"] = a.end.y - y
+			Drag.BOTTOM:
+				f["h"] = clampf(snapped_p.y, a.position.y + MIN_GATE, Simulation.BASE_SIZE.y) - a.position.y
+		if drag_mode != Drag.MOVE:
+			_rebuild_inspector()   # keep the width / height spin boxes in sync
 	elif selected >= 0:
+		var target := (p + drag_offset).snapped(Vector2(GRID, GRID))
 		var c: Dictionary = level["cannons"][selected]
 		c["x"] = clampf(target.x, 0.0, Simulation.BASE_SIZE.x)
 		c["y"] = clampf(target.y, 0.0, Simulation.BASE_SIZE.y)
@@ -422,6 +528,42 @@ func _drag_to(p: Vector2) -> void:
 	sim.set_tick(sim.tick)
 	view.refresh()
 	view.redraw_all()
+
+
+# ---------------------------------------------------------------- level settings
+
+func _show_settings() -> void:
+	var body := UI.dialog(UI.root_of(ui), "Level settings", 640)
+	body.add_child(UI.label("Background", 20))
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	body.add_child(grid)
+	var buttons: Array = []
+	for key in Backdrop.THEME_ORDER:
+		var info: Dictionary = Backdrop.THEMES[key]
+		var b := Button.new()
+		b.text = info["label"]
+		b.custom_minimum_size = Vector2(190, 70)
+		b.focus_mode = Control.FOCUS_NONE
+		b.toggle_mode = true
+		b.button_pressed = key == str(level.get("background", "space"))
+		var col: Color = info["swatch"]
+		b.add_theme_stylebox_override("normal", UI.flat(col, 14, 10))
+		b.add_theme_stylebox_override("hover", UI.flat(col.lightened(0.1), 14, 10))
+		b.add_theme_stylebox_override("pressed", UI.flat(col, 14, 10, Color.WHITE))
+		b.add_theme_color_override("font_color", Color.WHITE if col.get_luminance() < 0.5 else Color("#1b2138"))
+		b.add_theme_color_override("font_pressed_color", Color.WHITE if col.get_luminance() < 0.5 else Color("#1b2138"))
+		var chosen: String = key
+		b.pressed.connect(func():
+			level["background"] = chosen
+			for other in buttons:
+				other.button_pressed = other == b
+			_mark_dirty()
+			view.refresh())
+		grid.add_child(b)
+		buttons.append(b)
 
 
 # ---------------------------------------------------------------- preview / play / save
@@ -449,7 +591,7 @@ func _test_play() -> void:
 func _save() -> void:
 	if GameState.is_builtin(level):
 		level["id"] = GameState.new_level_id()
-		level["author"] = "You"
+		level["author"] = GameState.player_name()
 	if GameState.save_user_level(level):
 		dirty = false
 		save_button.text = "  Save  "

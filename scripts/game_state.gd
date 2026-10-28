@@ -8,6 +8,7 @@ const SCENE_MENU := "res://scenes/main_menu.tscn"
 const SCENE_SELECT := "res://scenes/level_select.tscn"
 const SCENE_LEVEL := "res://scenes/level.tscn"
 const SCENE_EDITOR := "res://scenes/editor.tscn"
+const SCENE_SETTINGS := "res://scenes/settings.tscn"
 
 ## Level handed to the level scene.
 var current_level: Dictionary = {}
@@ -24,6 +25,7 @@ func _ready() -> void:
 	is_mobile = OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios")
 	DirAccess.make_dir_recursive_absolute(USER_DIR)
 	_load_scores()
+	_load_profile()
 
 
 func go(scene_path: String) -> void:
@@ -95,6 +97,9 @@ func normalize_level(l: Dictionary) -> Dictionary:
 		l["finish"] = {"x": 1100.0, "y": 160.0, "w": 60.0, "h": 400.0}
 	if not l.has("start"):
 		l["start"] = 0
+	if not l.has("background") or not Backdrop.THEMES.has(str(l["background"])):
+		l["background"] = "space"
+	Simulation.enforce_start_type(l)
 	return l
 
 
@@ -110,11 +115,62 @@ func new_level() -> Dictionary:
 	return normalize_level({
 		"format": 1,
 		"name": "My Level",
-		"author": "You",
+		"author": player_name(),
 		"cannons": [{"x": 160.0, "y": 560.0, "angle": -45.0, "type": "normal", "behaviors": []}],
 		"finish": {"x": 1000.0, "y": 160.0, "w": 60.0, "h": 420.0},
 		"start": 0,
+		"background": "space",
 	})
+
+
+# ---------------------------------------------------------------- player profile
+
+const PROFILE_PATH := "user://profile.json"
+const PLAYER_COLORS := [
+	"#ffd166", "#ff8a3d", "#e5484d", "#ff6fb5", "#c77dff", "#4cc9f0", "#9bd36a", "#f1f3f8",
+]
+const NAME_ADJECTIVES := [
+	"Bouncy", "Rusty", "Turbo", "Sleepy", "Mighty", "Sneaky", "Fuzzy", "Jolly", "Wobbly", "Zesty",
+	"Lucky", "Grumpy", "Shiny", "Dizzy", "Brave", "Cosmic", "Soggy", "Nimble", "Spicy", "Loopy",
+]
+const NAME_NOUNS := [
+	"Barrel", "Cannonball", "Otter", "Pigeon", "Comet", "Walrus", "Pickle", "Rocket", "Badger",
+	"Noodle", "Meteor", "Penguin", "Muffin", "Yeti", "Llama", "Pebble", "Hedgehog", "Torpedo",
+]
+
+var profile: Dictionary = {}
+
+
+func player_name() -> String:
+	return str(profile.get("name", "Player"))
+
+
+func player_color() -> Color:
+	return Color(str(profile.get("color", PLAYER_COLORS[0])))
+
+
+func random_name() -> String:
+	return "%s %s" % [NAME_ADJECTIVES[randi() % NAME_ADJECTIVES.size()], NAME_NOUNS[randi() % NAME_NOUNS.size()]]
+
+
+func set_profile(name: String, color_hex: String) -> void:
+	profile["name"] = name
+	profile["color"] = color_hex
+	var f := FileAccess.open(PROFILE_PATH, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify(profile))
+
+
+func _load_profile() -> void:
+	var f := FileAccess.open(PROFILE_PATH, FileAccess.READ)
+	if f:
+		var data = JSON.parse_string(f.get_as_text())
+		if typeof(data) == TYPE_DICTIONARY:
+			profile = data
+	if not profile.has("name"):
+		profile["name"] = random_name()
+	if not profile.has("color"):
+		profile["color"] = PLAYER_COLORS[randi() % PLAYER_COLORS.size()]
 
 
 func save_user_level(level: Dictionary) -> bool:

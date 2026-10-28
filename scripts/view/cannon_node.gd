@@ -8,23 +8,26 @@ var occupied := false
 var selected := false
 var show_hints := false
 var pulse := 0.0
+var fuse := 1.0           # 0..1, fraction of the fuse left (auto cannons only)
+var spark_rng := RandomNumberGenerator.new()
 
 
 func _init(cannon_data: Dictionary) -> void:
 	data = cannon_data
 
 
-func apply_state(state: Dictionary, is_occupied: bool) -> void:
+func apply_state(state: Dictionary, is_occupied: bool, fuse_left: float = 1.0) -> void:
 	position = state["pos"]
 	var ang := float(state["angle"])
-	if ang != barrel_angle or is_occupied != occupied:
+	if ang != barrel_angle or is_occupied != occupied or fuse_left != fuse:
 		barrel_angle = ang
 		occupied = is_occupied
+		fuse = fuse_left
 		queue_redraw()
 
 
 func _process(delta: float) -> void:
-	if occupied or selected or data.get("type", "normal") == "auto":
+	if occupied or selected:
 		pulse += delta
 		queue_redraw()
 
@@ -75,12 +78,32 @@ func _draw() -> void:
 			draw_arc(Vector2.ZERO, 15.0, 0.0, TAU, 24, Color(1, 1, 1, 0.8), 2.0)
 			draw_circle(Vector2(-5, -5), 3.0, Color.WHITE)
 		"auto":
-			var t := fmod(pulse, 0.75) / 0.75
-			draw_arc(Vector2.ZERO, 15.0, -PI / 2.0, -PI / 2.0 + TAU * t, 24, Color.WHITE, 3.0)
+			_draw_fuse()
 		"strong":
 			draw_arc(Vector2.ZERO, 15.0, 0.0, TAU, 24, Color.WHITE, 3.0)
 		"weak":
 			draw_circle(Vector2.ZERO, 3.0, Color.WHITE)
+
+
+## A fuse ring that burns down clockwise from the top; it fires when nothing is left.
+## While it burns, sparks fly off the burning end.
+func _draw_fuse() -> void:
+	var start := -PI / 2.0
+	var end := start + TAU * fuse
+	draw_arc(Vector2.ZERO, 15.0, start, start + TAU, 24, Color(1, 1, 1, 0.2), 3.0)
+	if fuse > 0.0:
+		draw_arc(Vector2.ZERO, 15.0, start, end, 24, Color.WHITE, 3.0)
+	if occupied and fuse < 1.0 and fuse > 0.0:
+		var tip := Vector2.from_angle(end) * 15.0
+		draw_circle(tip, 4.0, Color("#fff1a8"))
+		# Sparks: purely visual, re-rolled every frame.
+		spark_rng.seed = int(pulse * 60.0)
+		for i in 7:
+			var dir := Vector2.from_angle(spark_rng.randf_range(0.0, TAU))
+			var len := spark_rng.randf_range(6.0, 18.0)
+			var col := Color("#ffd166") if i % 2 == 0 else Color("#ff8a3d")
+			draw_line(tip + dir * 3.0, tip + dir * len, Color(col, spark_rng.randf_range(0.4, 1.0)), 1.5)
+			draw_circle(tip + dir * len, 1.5, Color(col, 0.9))
 
 
 func _draw_hints() -> void:

@@ -1,8 +1,13 @@
 extends Node2D
 ## The playable level scene. Drives one [Simulation] at a fixed 60 ticks/s and renders it.
 ## Any tap / click / key / gamepad button is the single action: fire.
+## The camera can zoom out (mouse wheel or pinch) and be dragged around while a button is held.
 
-const DEATH_PAUSE := 0.55
+const DEATH_PAUSE := 0.7
+const ZOOM_MIN := 0.4        # furthest out
+const ZOOM_MAX := 1.0        # the default view; zooming in closer than that is not allowed
+const ZOOM_STEP := 1.12
+const DRAG_THRESHOLD := 10.0
 
 var sim: Simulation
 var view: LevelView
@@ -11,10 +16,17 @@ var pending_fire := false
 var death_timer := 0.0
 var finished := false
 
+var camera: Camera2D
+var dragging := false
+var drag_last := Vector2.ZERO
+var touches: Dictionary = {}       # finger index -> screen position (for pinch)
+var pinch_last_dist := 0.0
+
 var ui: CanvasLayer
 var time_label: Label
 var best_label: Label
 var hint_label: Label
+var flash: ColorRect
 var win_panel: PanelContainer
 var win_time: Label
 var win_best: Label
@@ -29,13 +41,29 @@ func _ready() -> void:
 	view = LevelView.new()
 	add_child(view)
 	view.bind(sim)
+	camera = Camera2D.new()
+	add_child(camera)
+	_reset_camera()
+	get_viewport().size_changed.connect(_reset_camera)
 	_build_ui()
+
+
+func _reset_camera() -> void:
+	camera.zoom = Vector2.ONE
+	camera.position = get_viewport_rect().size * 0.5
+	_clamp_camera()
 
 
 func _build_ui() -> void:
 	ui = UI.layer()
 	add_child(ui)
 	var root := UI.root_of(ui)
+
+	flash = ColorRect.new()
+	flash.color = Color(UI.BAD, 0.0)
+	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(flash)
 
 	var top := HBoxContainer.new()
 	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
@@ -64,6 +92,9 @@ func _build_ui() -> void:
 	top.add_child(times)
 	top.add_child(UI.hspacer_expand())
 
+	var help := UI.icon_button("", "help")
+	help.pressed.connect(func(): HelpDialog.show(root))
+	top.add_child(help)
 	var restart := UI.small_button("  Reset  ")
 	restart.pressed.connect(_restart)
 	top.add_child(restart)
@@ -114,22 +145,97 @@ func _update_best() -> void:
 	best_label.text = "best " + Simulation.format_ticks(best) if best >= 0 else "no time yet"
 
 
+# ---------------------------------------------------------------- input
+
 func _unhandled_input(event: InputEvent) -> void:
-	if finished:
-		return
-	if event is InputEventKey and event.pressed and not event.echo:
+	# Camera controls work in every state, firing only while playing.
+	if event is InputEventMouseButton:
+		match event.button_index:
+			MOUSE_BUTTON_WHEEL_UP:
+				_zoom_by(ZOOM_STEP, event.position)
+				return
+			MOUSE_BUTTON_WHEEL_DOWN:
+				_zoom_by(1.0 / ZOOM_STEP, event.position)
+				return
+		if event.pressed:
+			dragging = true
+			drag_last = event.position
+			_fire()
+		else:
+			dragging = false
+	elif event is InputEventMouseMotion:
+		if dragging and touches.size() < 2:
+			camera.position -= event.relative / camera.zoom.x
+			_clamp_camera()
+	elif event is InputEventScreenTouch:
+		# Track every finger for pinch-to-zoom. The first finger also arrives as mouse events.
+		if event.pressed:
+			touches[event.index] = event.position
+		else:
+			touches.erase(event.index)
+		if touches.size() == 2:
+			pinch_last_dist = _pinch_distance()
+	elif event is InputEventScreenDrag:
+		if touches.has(event.index):
+			touches[event.index] = event.position
+		if touches.size() == 2:
+			var d := _pinch_distance()
+			if pinch_last_dist > 0.0:
+				_zoom_by(d / pinch_last_dist, _pinch_center())
+			pinch_last_dist = d
+	elif event is InputEventMagnifyGesture:
+		if touches.size() < 2:
+			_zoom_by(event.factor, event.position)
+	elif event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE:
 			_on_back()
 			return
-		pending_fire = true
-		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.pressed:
-		pending_fire = true
-		get_viewport().set_input_as_handled()
+		_fire()
 	elif event is InputEventJoypadButton and event.pressed:
-		pending_fire = true
-		get_viewport().set_input_as_handled()
+		_fire()
 
+
+func _fire() -> void:
+	if finished:
+		return
+	pending_fire = true
+	get_viewport().set_input_as_handled()
+
+
+func _pinch_distance() -> float:
+	var pts := touches.values()
+	return (pts[0] as Vector2).distance_to(pts[1] as Vector2)
+
+
+func _pinch_center() -> Vector2:
+	var pts := touches.values()
+	return ((pts[0] as Vector2) + (pts[1] as Vector2)) * 0.5
+
+
+## Zooms around a screen point so what is under the finger / cursor stays put.
+func _zoom_by(factor: float, screen_point: Vector2) -> void:
+	var old_zoom := camera.zoom.x
+	var new_zoom := clampf(old_zoom * factor, ZOOM_MIN, ZOOM_MAX)
+	if is_equal_approx(new_zoom, old_zoom):
+		return
+	var vp_center := get_viewport_rect().size * 0.5
+	var world_before := camera.position + (screen_point - vp_center) / old_zoom
+	camera.zoom = Vector2(new_zoom, new_zoom)
+	camera.position = world_before - (screen_point - vp_center) / new_zoom
+	_clamp_camera()
+
+
+## Keeps the play area in view: never pan further than the world bounds.
+func _clamp_camera() -> void:
+	var half := get_viewport_rect().size * 0.5 / camera.zoom.x
+	var world := Rect2(view.position + Simulation.WORLD.position, Simulation.WORLD.size)
+	var lo := world.position + half
+	var hi := world.end - half
+	camera.position.x = clampf(camera.position.x, minf(lo.x, hi.x), maxf(lo.x, hi.x))
+	camera.position.y = clampf(camera.position.y, minf(lo.y, hi.y), maxf(lo.y, hi.y))
+
+
+# ---------------------------------------------------------------- simulation
 
 func _physics_process(delta: float) -> void:
 	if finished:
@@ -147,13 +253,16 @@ func _physics_process(delta: float) -> void:
 			"launch":
 				view.player_node.kick()
 				hint_label.visible = false
+				Sfx.play(self, Sfx.pop(), -6.0)
+			"teleport":
+				view.player_node.blink(sim.teleport_from, sim.pos)
 			"jump":
 				view.player_node.kick()
+				Sfx.play(self, Sfx.pop(), -6.0)
 			"catch":
 				view.player_node.kick()
 			"die":
-				view.player_node.puff()
-				death_timer = DEATH_PAUSE
+				_on_die()
 			"finish":
 				_on_finish()
 
@@ -161,6 +270,15 @@ func _physics_process(delta: float) -> void:
 func _process(_delta: float) -> void:
 	view.refresh()
 	time_label.text = Simulation.format_ticks(sim.elapsed_ticks())
+
+
+func _on_die() -> void:
+	view.player_node.puff()
+	death_timer = DEATH_PAUSE
+	Sfx.play(self, Sfx.buzzer(), -4.0)
+	flash.color = Color(UI.BAD, 0.35)
+	var tw := create_tween()
+	tw.tween_property(flash, "color:a", 0.0, DEATH_PAUSE)
 
 
 func _reset_run() -> void:
@@ -178,6 +296,7 @@ func _restart() -> void:
 
 func _on_finish() -> void:
 	finished = true
+	Sfx.play(self, Sfx.chime(), -4.0)
 	var ticks := sim.finish_ticks
 	var id := str(level.get("id", ""))
 	var new_best := GameState.record_time(id, ticks)

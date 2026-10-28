@@ -7,6 +7,7 @@ const SHOTS := [
 	["level_select", "res://scenes/level_select.tscn"],
 	["level", "res://scenes/level.tscn"],
 	["editor", "res://scenes/editor.tscn"],
+	["settings", "res://scenes/settings.tscn"],
 ]
 
 
@@ -15,6 +16,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	GameState.current_level = GameState.builtin_levels()[6]
 	GameState.editor_level = GameState.builtin_levels()[5].duplicate(true)
+	GameState.editor_level["background"] = "underwater"
 	for shot in SHOTS:
 		var scene: Node = (load(shot[1]) as PackedScene).instantiate()
 		get_tree().root.add_child(scene)

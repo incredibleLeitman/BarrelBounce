@@ -65,8 +65,24 @@ func _test_play_with_taps() -> void:
 	# Dying resets the run clock and the tick.
 	scene._restart()
 	check(sim.tick == 0 and sim.elapsed_ticks() == 0, "restart resets tick and timer to 0")
+	# Camera: zooming in beyond the default is refused, zooming out is clamped to the minimum.
+	scene._zoom_by(2.0, Vector2(640, 360))
+	check(scene.camera.zoom.x == 1.0, "cannot zoom closer than the default view")
+	scene._zoom_by(0.01, Vector2(640, 360))
+	check(is_equal_approx(scene.camera.zoom.x, scene.ZOOM_MIN), "zoom out stops at the minimum")
 	scene.queue_free()
 	await get_tree().process_frame
+
+	print("rules: start cannon type, teleport")
+	var hot: Dictionary = GameState.normalize_level({"cannons": [{"x": 0, "y": 0, "angle": 0, "type": "auto"}], "start": 0})
+	check(hot["cannons"][0]["type"] == "normal", "an auto start cannon is forced to a plain cannon on load")
+	var blink := Simulation.new(GameState.normalize_level({"cannons": [
+		{"x": 100.0, "y": 600.0, "angle": 0.0, "type": "normal"},
+		{"x": 300.0, "y": 300.0, "angle": -90.0, "type": "dash"}], "start": 0}))
+	blink.cannon_index = 1   # pretend the ball was caught by the Blink cannon
+	blink.step(true)
+	check(blink.events.has("teleport") and blink.pos.y < 300.0 - 200.0, "Blink teleports 210 px along the barrel instantly")
+	check(blink.teleport_from.y > blink.pos.y, "teleport origin recorded for the effect")
 
 
 func _test_editor_roundtrip() -> void:

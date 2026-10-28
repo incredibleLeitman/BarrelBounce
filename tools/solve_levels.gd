@@ -88,7 +88,7 @@ func solve(level: Dictionary, max_seconds: float) -> Dictionary:
 				var ftaps := taps.duplicate()
 				f.step(true)
 				var flight := 0
-				while f.mode == SimulationScript.Mode.FLYING or f.mode == SimulationScript.Mode.DASHING:
+				while f.mode == SimulationScript.Mode.FLYING:
 					flight += 1
 					var tap: bool = jump_at > 0 and flight == jump_at
 					if tap:

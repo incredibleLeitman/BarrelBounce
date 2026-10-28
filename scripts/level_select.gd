@@ -120,19 +120,19 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 	info.add_child(UI.label(meta, 16, UI.MUTED))
 
 	if editable:
-		var del := UI.small_button("  Delete  ")
-		del.add_theme_color_override("font_color", UI.BAD)
+		var del := UI.icon_button("", "trash")
 		del.pressed.connect(func():
-			GameState.delete_user_level(str(level["id"]))
-			_refresh())
+			UI.confirm(UI.root_of(ui), "Delete level?", "“%s” will be gone for good." % str(level.get("name", "")), "Delete", func():
+				GameState.delete_user_level(str(level["id"]))
+				_refresh()))
 		row.add_child(del)
-	var edit := UI.small_button("  Edit  " if editable else "  Remix  ")
+	var edit := UI.icon_button("Edit" if editable else "Remix", "pen")
 	edit.pressed.connect(func():
 		var copy: Dictionary = level.duplicate(true)
 		if not editable:
 			copy["id"] = GameState.new_level_id()
 			copy["name"] = str(level.get("name", "Level")) + " remix"
-			copy["author"] = "You"
+			copy["author"] = GameState.player_name()
 		GameState.editor_level = copy
 		GameState.go(GameState.SCENE_EDITOR))
 	row.add_child(edit)

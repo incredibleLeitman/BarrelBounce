@@ -55,10 +55,13 @@ a future ghost / replay / leaderboard-verification feature need.
 | `normal` | Cannon | launch speed 950 px/s |
 | `strong` | Big Bertha | 1400 px/s |
 | `weak` | Pea Shooter | 620 px/s |
-| `dash` | Blink | straight line at 2800 px/s ignoring gravity for 9 ticks, then normal flight |
+| `dash` | Blink | teleports the ball 210 px along the barrel, then it flies on at 650 px/s |
 | `double` | Hopper | one extra mid-air boost on a second tap |
 | `bubble` | Bubble | 35 % gravity during the flight |
-| `auto` | Hot Head | fires on its own after 45 ticks, tap earlier if you want |
+| `auto` | Hot Head | a fuse burns down for 45 ticks, then it fires on its own; tap earlier if you want |
+
+The **start cannon is always a plain cannon**: a level must never fire without the player's
+tap. The editor locks the type of the start cannon and loading a level enforces it.
 
 ### Movement behaviours (combine as many as you like per cannon)
 
@@ -83,9 +86,33 @@ Saved levels are JSON in `user://levels/<id>.json` (on Windows:
      "behaviors": [{"type": "orbit", "radius": 120, "period": 3, "clockwise": true}]}
   ],
   "finish": {"x": 1100, "y": 160, "w": 60, "h": 400},
-  "start": 0
+  "start": 0,
+  "background": "space"
 }
 ```
+
+`background` is one of `space`, `underwater`, `meadow`, `sunset`, `cave` (all drawn
+procedurally in `scripts/view/backdrop.gd`; pick one under *Settings* in the editor).
+
+### Player profile
+
+*Player* on the main menu lets you pick a ball colour and roll a random name. It is stored
+in `user://profile.json` and used as the author of levels you create. It is the identity a
+future shared leaderboard would use.
+
+### Where your files live
+
+`user://` is Godot's per-app data folder:
+
+| platform | folder |
+|---|---|
+| Windows | `%APPDATA%\Godot\app_userdata\BarrelBounce\` |
+| Linux | `~/.local/share/godot/app_userdata/BarrelBounce/` |
+| macOS | `~/Library/Application Support/Godot/app_userdata/BarrelBounce/` |
+| Android | app-private storage (`/data/data/com.donkeycat.barrelbounce/files/`), not reachable without root |
+| Web | a virtual file system persisted in the browser's IndexedDB; clearing site data deletes it |
+
+Inside: `levels/<id>.json`, `scores.json`, `profile.json`.
 
 Coordinates are in the 1280x720 play area (y down). Angles: 0° = right, -90° = up.
 Leaving the rectangle `Simulation.WORLD` (a bit larger than the screen) kills the ball.
