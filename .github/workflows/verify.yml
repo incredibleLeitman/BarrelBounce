@@ -69,6 +69,11 @@ jobs:
           # The same call the Community tab makes; prints how many levels are listed.
           curl -sS -L -G "$API_URL" --data-urlencode "action=levels" --data-urlencode "player_id=ci" -o levels.json
           python3 -c "import json;d=json.load(open('levels.json'));assert d.get('ok'),d;print(len(d['rows']),'community level(s) listed');[print(' -',r['name'],r['status'],'stars',r['stars']) for r in d['rows']]"
+          # And each level's leaderboard, as the win panel shows it (names only, no ids).
+          for pair in $(python3 -c "import json;[print(r['id']+':'+r['rev']) for r in json.load(open('levels.json'))['rows']]"); do
+            curl -sS -L -G "$API_URL" --data-urlencode "action=leaderboard" --data-urlencode "level_id=${pair%%:*}" --data-urlencode "rev=${pair##*:}" -o board.json
+            python3 -c "import json;d=json.load(open('board.json'));assert d.get('ok'),d;print('   leaderboard of',repr('${pair%%:*}'),':',d['total'],'verified run(s)');[print('    ',r['rank'],r['player_name'],'%.2f s'%(r['ticks']/60)) for r in d['rows']]"
+          done
 
       - name: Cache Godot
         if: steps.cfg.outputs.configured == 'true' && steps.fetch.outputs.count != '0'
