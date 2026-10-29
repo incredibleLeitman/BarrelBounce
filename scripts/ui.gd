@@ -19,51 +19,51 @@ static var _theme: Theme
 static func theme() -> Theme:
 	if _theme:
 		return _theme
-	var t := Theme.new()
-	t.default_font_size = 20
+	var th := Theme.new()
+	th.default_font_size = 20
 
-	t.set_stylebox("normal", "Button", flat(PANEL_LIGHT, 14, 14))
-	t.set_stylebox("hover", "Button", flat(PANEL_LIGHT.lightened(0.12), 14, 14))
-	t.set_stylebox("pressed", "Button", flat(ACCENT, 14, 14))
-	t.set_stylebox("focus", "Button", empty())
-	t.set_stylebox("disabled", "Button", flat(PANEL, 14, 14))
-	t.set_color("font_color", "Button", TEXT)
-	t.set_color("font_hover_color", "Button", TEXT)
-	t.set_color("font_pressed_color", "Button", Color.WHITE)
-	t.set_color("font_disabled_color", "Button", MUTED)
-	t.set_color("font_focus_color", "Button", TEXT)
+	th.set_stylebox("normal", "Button", flat(PANEL_LIGHT, 14, 14))
+	th.set_stylebox("hover", "Button", flat(PANEL_LIGHT.lightened(0.12), 14, 14))
+	th.set_stylebox("pressed", "Button", flat(ACCENT, 14, 14))
+	th.set_stylebox("focus", "Button", empty())
+	th.set_stylebox("disabled", "Button", flat(PANEL, 14, 14))
+	th.set_color("font_color", "Button", TEXT)
+	th.set_color("font_hover_color", "Button", TEXT)
+	th.set_color("font_pressed_color", "Button", Color.WHITE)
+	th.set_color("font_disabled_color", "Button", MUTED)
+	th.set_color("font_focus_color", "Button", TEXT)
 
 	for cls in ["OptionButton", "CheckBox", "CheckButton"]:
-		t.set_stylebox("normal", cls, flat(PANEL_LIGHT, 10, 10))
-		t.set_stylebox("hover", cls, flat(PANEL_LIGHT.lightened(0.12), 10, 10))
+		th.set_stylebox("normal", cls, flat(PANEL_LIGHT, 10, 10))
+		th.set_stylebox("hover", cls, flat(PANEL_LIGHT.lightened(0.12), 10, 10))
 		# A checked box is shown by its check mark, not by an orange fill.
 		var checked_style := flat(ACCENT, 10, 10) if cls == "OptionButton" else flat(PANEL_LIGHT, 10, 10)
-		t.set_stylebox("pressed", cls, checked_style)
-		t.set_stylebox("hover_pressed", cls, flat(PANEL_LIGHT.lightened(0.12), 10, 10))
-		t.set_stylebox("focus", cls, empty())
-		t.set_color("font_color", cls, TEXT)
-		t.set_color("font_hover_color", cls, TEXT)
-		t.set_color("font_pressed_color", cls, TEXT)
+		th.set_stylebox("pressed", cls, checked_style)
+		th.set_stylebox("hover_pressed", cls, flat(PANEL_LIGHT.lightened(0.12), 10, 10))
+		th.set_stylebox("focus", cls, empty())
+		th.set_color("font_color", cls, TEXT)
+		th.set_color("font_hover_color", cls, TEXT)
+		th.set_color("font_pressed_color", cls, TEXT)
 
-	t.set_stylebox("panel", "PanelContainer", flat(PANEL, 18, 16))
-	t.set_stylebox("panel", "Panel", flat(PANEL, 18, 16))
-	t.set_stylebox("panel", "PopupMenu", flat(PANEL, 10, 8))
-	t.set_stylebox("hover", "PopupMenu", flat(PANEL_LIGHT, 8, 6))
-	t.set_color("font_color", "PopupMenu", TEXT)
-	t.set_color("font_hover_color", "PopupMenu", Color.WHITE)
+	th.set_stylebox("panel", "PanelContainer", flat(PANEL, 18, 16))
+	th.set_stylebox("panel", "Panel", flat(PANEL, 18, 16))
+	th.set_stylebox("panel", "PopupMenu", flat(PANEL, 10, 8))
+	th.set_stylebox("hover", "PopupMenu", flat(PANEL_LIGHT, 8, 6))
+	th.set_color("font_color", "PopupMenu", TEXT)
+	th.set_color("font_hover_color", "PopupMenu", Color.WHITE)
 
-	t.set_stylebox("normal", "LineEdit", flat(BG_DEEP, 10, 10))
-	t.set_stylebox("focus", "LineEdit", flat(BG_DEEP, 10, 10, ACCENT))
-	t.set_color("font_color", "LineEdit", TEXT)
-	t.set_color("caret_color", "LineEdit", ACCENT)
-	t.set_color("font_placeholder_color", "LineEdit", MUTED)
+	th.set_stylebox("normal", "LineEdit", flat(BG_DEEP, 10, 10))
+	th.set_stylebox("focus", "LineEdit", flat(BG_DEEP, 10, 10, ACCENT))
+	th.set_color("font_color", "LineEdit", TEXT)
+	th.set_color("caret_color", "LineEdit", ACCENT)
+	th.set_color("font_placeholder_color", "LineEdit", MUTED)
 
-	t.set_stylebox("up_background", "SpinBox", empty())
-	t.set_stylebox("down_background", "SpinBox", empty())
-	t.set_color("font_color", "Label", TEXT)
-	t.set_stylebox("panel", "ScrollContainer", empty())
-	_theme = t
-	return t
+	th.set_stylebox("up_background", "SpinBox", empty())
+	th.set_stylebox("down_background", "SpinBox", empty())
+	th.set_color("font_color", "Label", TEXT)
+	th.set_stylebox("panel", "ScrollContainer", empty())
+	_theme = th
+	return th
 
 
 static func flat(color: Color, radius: int = 12, pad: int = 10, border: Color = Color.TRANSPARENT) -> StyleBoxFlat:
@@ -126,22 +126,22 @@ static func icon_button(text: String, icon_name: String, min_height: float = 44.
 ## Modal dialog with a title, a message and Yes / No buttons. [param on_yes] runs on confirm.
 ## Full-screen shade on a layer above everything else; freeing it closes the dialog.
 static func _shade(parent: Control) -> ColorRect:
-	var layer := CanvasLayer.new()
-	layer.layer = 100
+	var canvas := CanvasLayer.new()
+	canvas.layer = 100
 	# Attach to the scene that owns the parent (its top-most ancestor below the root), so the
 	# dialog disappears together with the scene instead of surviving a scene change.
 	var owner_scene: Node = parent
 	var root := parent.get_tree().root
 	while owner_scene.get_parent() != null and owner_scene.get_parent() != root:
 		owner_scene = owner_scene.get_parent()
-	owner_scene.add_child(layer)
+	owner_scene.add_child(canvas)
 	var shade := ColorRect.new()
 	shade.color = Color(0, 0, 0, 0.55)
 	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	shade.mouse_filter = Control.MOUSE_FILTER_STOP
 	shade.theme = theme()
-	shade.tree_exited.connect(layer.queue_free)
-	layer.add_child(shade)
+	shade.tree_exited.connect(canvas.queue_free)
+	canvas.add_child(shade)
 	return shade
 
 
@@ -210,12 +210,12 @@ static func dialog(parent: Control, title_text: String, width: float = 720.0) ->
 	return body
 
 
-static func label(text: String, size: int = 20, color: Color = TEXT, wrap: bool = false) -> Label:
+static func label(text: String, size: int = 20, color: Color = TEXT, autowrap: bool = false) -> Label:
 	var l := Label.new()
 	l.text = t(text)
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
-	if wrap:
+	if autowrap:
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return l

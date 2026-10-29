@@ -62,11 +62,18 @@ func _call(query: String, method: int, body: Dictionary, cb: Callable) -> void:
 	add_child(req)
 	req.request_completed.connect(func(result: int, code: int, _headers: PackedStringArray, raw: PackedByteArray):
 		req.queue_free()
-		var data = JSON.parse_string(raw.get_string_from_utf8()) if raw.size() > 0 else null
+		# Only parse what looks like JSON: a 404 page or a PHP error is HTML and would
+		# otherwise spam the log with parse errors.
+		var text := raw.get_string_from_utf8().strip_edges()
+		var data = JSON.parse_string(text) if text.begins_with("{") else null
 		var ok := result == HTTPRequest.RESULT_SUCCESS and code >= 200 and code < 300 \
 			and typeof(data) == TYPE_DICTIONARY and bool(data.get("ok", false))
 		if typeof(data) != TYPE_DICTIONARY:
-			data = {"error": "bad response (%d)" % code}
+			if result != HTTPRequest.RESULT_SUCCESS:
+				data = {"error": "no connection (%d)" % result}
+			else:
+				data = {"error": "HTTP %d, not JSON: %s" % [code, text.left(60)]}
+			push_warning("Online: %s %s -> %s" % [query.get_slice("&", 0), API_URL, str(data["error"])])
 		if cb.is_valid():
 			cb.call(ok, data))
 	var url := API_URL + ("&" if "?" in API_URL else "?") + "action=" + query

@@ -155,10 +155,10 @@ func player_id() -> String:
 
 
 ## A player's name for display: "You" when it is this player.
-func display_name(name: String, id: String) -> String:
+func display_name(shown_name: String, id: String) -> String:
 	if id != "" and id == player_id():
 		return "You"
-	return name
+	return shown_name
 
 
 func player_color() -> Color:
@@ -205,8 +205,8 @@ func random_name() -> String:
 	return "%s %s" % [NAME_ADJECTIVES[randi() % NAME_ADJECTIVES.size()], NAME_NOUNS[randi() % NAME_NOUNS.size()]]
 
 
-func set_profile(name: String, color_hex: String) -> void:
-	profile["name"] = name
+func set_profile(new_name: String, color_hex: String) -> void:
+	profile["name"] = new_name
 	profile["color"] = color_hex
 	var f := FileAccess.open(PROFILE_PATH, FileAccess.WRITE)
 	if f:

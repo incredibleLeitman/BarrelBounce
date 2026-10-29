@@ -323,10 +323,10 @@ static func point_along(pts: PackedVector2Array, closed: bool, u: float) -> Vect
 	for i in segs:
 		var a := pts[i]
 		var c := pts[(i + 1) % n]
-		var len := a.distance_to(c)
-		if d <= len or i == segs - 1:
-			return a.lerp(c, d / len if len > 0.0 else 0.0)
-		d -= len
+		var seg_len := a.distance_to(c)
+		if d <= seg_len or i == segs - 1:
+			return a.lerp(c, d / seg_len if seg_len > 0.0 else 0.0)
+		d -= seg_len
 	return pts[0]
 
 

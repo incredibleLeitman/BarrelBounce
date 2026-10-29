@@ -107,10 +107,10 @@ func _draw_fuse() -> void:
 		spark_rng.seed = int(pulse * 60.0)
 		for i in 7:
 			var dir := Vector2.from_angle(spark_rng.randf_range(0.0, TAU))
-			var len := spark_rng.randf_range(6.0, 18.0)
+			var spark_len := spark_rng.randf_range(6.0, 18.0)
 			var col := Color("#ffd166") if i % 2 == 0 else Color("#ff8a3d")
-			draw_line(tip + dir * 3.0, tip + dir * len, Color(col, spark_rng.randf_range(0.4, 1.0)), 1.5)
-			draw_circle(tip + dir * len, 1.5, Color(col, 0.9))
+			draw_line(tip + dir * 3.0, tip + dir * spark_len, Color(col, spark_rng.randf_range(0.4, 1.0)), 1.5)
+			draw_circle(tip + dir * spark_len, 1.5, Color(col, 0.9))
 
 
 ## Colour of this cannon's movement hints: the pulsing selection colour when selected,
