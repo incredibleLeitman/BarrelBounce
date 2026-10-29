@@ -42,7 +42,7 @@ trusts a client's time.
 
 ## Upgrading an existing database
 
-Databases created before `migrate_002.sql` existed need that file run once (phpMyAdmin > SQL):
+Databases created before `migrate_001.sql` existed need that file run once (phpMyAdmin > SQL):
 it adds the `reason` columns, the `stars` table and an index. Also add
 `'max_levels_per_player' => 3` to `config.php` (3 is the default when missing).
 

@@ -1,4 +1,4 @@
--- Migration 002: verdict reasons, stars, per-player limits.
+-- Migration 001: verdict reasons, stars, per-player limits.
 -- Run once on a database created from the previous schema.sql (phpMyAdmin > SQL).
 -- A fresh install does not need this: schema.sql already contains everything.
 

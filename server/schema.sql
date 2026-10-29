@@ -1,6 +1,6 @@
 -- BarrelBounce online API: MySQL / MariaDB schema.
 -- Import once (phpMyAdmin > Import, or `mysql -u USER -p DB < schema.sql`).
--- Existing databases from before migrate_002.sql: run that file instead.
+-- Existing databases from before migrate_001.sql: run that file instead.
 
 CREATE TABLE IF NOT EXISTS levels (
   id            VARCHAR(64)  NOT NULL PRIMARY KEY,   -- the level's own id (user_...)

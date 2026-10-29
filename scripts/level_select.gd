@@ -414,24 +414,24 @@ func _add_community_row(r: Dictionary) -> void:
 				_unpublish(id, str(r.get("name", "")))))
 		row.add_child(remove)
 	else:
-		var starred := bool(r.get("starred", false))
-		var count := int(r.get("stars", 0))
-		var star := UI.icon_button(str(count), "star" if starred else "star_off")
+		# Lambdas capture by value, so the toggle state lives in a dictionary (shared by reference).
+		var state := {"starred": bool(r.get("starred", false)), "count": int(r.get("stars", 0))}
+		var star := UI.icon_button(str(state["count"]), "star" if state["starred"] else "star_off")
 		star.tooltip_text = tr("Mark as a favourite: starred levels are listed first.")
 		star.pressed.connect(func():
-			starred = not starred
+			var want: bool = not state["starred"]
 			star.disabled = true
-			Online.star(id, starred, func(ok: bool, data: Dictionary):
+			Online.star(id, want, func(ok: bool, data: Dictionary):
 				if not is_instance_valid(star):
 					return
 				star.disabled = false
 				if not ok:
-					starred = not starred
 					UI.toast(UI.root_of(ui), tr("Could not star the level: %s") % Online.error_text(data), UI.BAD)
 					return
-				count = int(data.get("stars", count))
-				star.text = str(count)
-				star.icon = load("res://assets/icons/%s.svg" % ("star" if starred else "star_off"))))
+				state["starred"] = want
+				state["count"] = int(data.get("stars", state["count"]))
+				star.text = str(state["count"])
+				star.icon = load("res://assets/icons/%s.svg" % ("star" if want else "star_off"))))
 		row.add_child(star)
 	var play := UI.accent_button("  Play  ", 48, 20)
 	play.pressed.connect(func():
