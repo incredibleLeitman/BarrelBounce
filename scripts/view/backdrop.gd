@@ -8,8 +8,9 @@ const THEMES := {
 	"meadow": {"label": "Meadow", "swatch": Color("#7ec8ff")},
 	"sunset": {"label": "Sunset", "swatch": Color("#ff7b54")},
 	"cave": {"label": "Cave", "swatch": Color("#2c2230")},
+	"battlefield": {"label": "Battlefield", "swatch": Color("#5a4a36")},
 }
-const THEME_ORDER := ["space", "underwater", "meadow", "sunset", "cave"]
+const THEME_ORDER := ["space", "underwater", "meadow", "sunset", "cave", "battlefield"]
 
 var theme_name := "space":
 	set(v):
@@ -26,7 +27,7 @@ var t := 0.0
 
 func _process(delta: float) -> void:
 	# Only the animated themes need continuous redraws.
-	if theme_name == "underwater" or theme_name == "meadow":
+	if theme_name == "underwater" or theme_name == "meadow" or theme_name == "battlefield":
 		t += delta
 		queue_redraw()
 
@@ -37,6 +38,7 @@ func _draw() -> void:
 		"meadow": _draw_meadow()
 		"sunset": _draw_sunset()
 		"cave": _draw_cave()
+		"battlefield": _draw_battlefield()
 		_: _draw_space()
 	if show_grid:
 		_draw_grid()
@@ -184,6 +186,138 @@ func _draw_grid() -> void:
 	while y <= size.y:
 		draw_line(Vector2(0, y), Vector2(size.x, y), major if fmod(y, 50.0) == 0.0 else minor, -1.0)
 		y += 10.0
+
+
+## A wasted battlefield: dusty sky, smoke columns, ruined silhouettes, shell craters, barbed
+## wire, sandbags and two knocked-out tanks, one of them still smouldering.
+func _draw_battlefield() -> void:
+	var ground_y := level_size.y
+	var field_y := ground_y - 140.0   # where the churned-up mud field begins
+	draw_rect(Rect2(-4000, -4000, 8000, 8000), Color("#3a3328"))
+	_bands(Color("#4a4236"), Color("#8c7a5e"), -700, field_y - 60, 14)
+	_bands(Color("#8c7a5e"), Color("#a08a66"), field_y - 60, field_y, 3)
+	# Pale sun behind haze.
+	draw_circle(Vector2(level_size.x * 0.75, 120), 70.0, Color(1, 0.95, 0.8, 0.12))
+	draw_circle(Vector2(level_size.x * 0.75, 120), 44.0, Color(1, 0.95, 0.8, 0.35))
+	# Ruined buildings and dead trees on the horizon.
+	var rng := _rng(1917)
+	for i in 14:
+		var x := rng.randf_range(-600, level_size.x + 900)
+		var w := rng.randf_range(50, 140)
+		var h := rng.randf_range(40, 150)
+		var col := Color("#5f5343")
+		var pts := PackedVector2Array([Vector2(x, field_y), Vector2(x, field_y - h)])
+		var steps := int(rng.randf_range(2, 5))
+		for k in steps:
+			var sx := x + w * (k + 1) / steps
+			pts.append(Vector2(sx, field_y - h * rng.randf_range(0.3, 1.0)))
+		pts.append(Vector2(x + w, field_y))
+		draw_colored_polygon(pts, col)
+		# blown-out window holes
+		for k in 3:
+			var wx := x + rng.randf_range(8, w - 16)
+			var wy := field_y - rng.randf_range(15, h - 20)
+			if wy < field_y - 12:
+				draw_rect(Rect2(wx, wy, 8, 10), Color("#8c7a5e"))
+	for i in 9:
+		var x := rng.randf_range(-600, level_size.x + 900)
+		var h := rng.randf_range(60, 130)
+		draw_line(Vector2(x, field_y), Vector2(x + 6, field_y - h), Color("#2e2820"), 5.0)
+		draw_line(Vector2(x + 3, field_y - h * 0.6), Vector2(x - 25, field_y - h * 0.85), Color("#2e2820"), 3.0)
+		draw_line(Vector2(x + 4, field_y - h * 0.8), Vector2(x + 28, field_y - h * 0.95), Color("#2e2820"), 3.0)
+	# Thin smoke columns drifting up from fires behind the horizon.
+	for i in 4:
+		var x := rng.randf_range(-200, level_size.x + 400)
+		for k in 9:
+			var age := fmod(t * 0.12 + k * 0.111 + i * 0.3, 1.0)
+			var p := Vector2(x + sin(age * 5.0 + i) * 14.0 + age * 90.0, field_y - 10.0 - age * 380.0)
+			draw_circle(p, 7.0 + age * 22.0, Color(0.22, 0.2, 0.17, 0.10 * (1.0 - age)))
+	# The mud field: a churned strip with shell craters, nearer ones bigger.
+	draw_rect(Rect2(-4000, field_y, 8000, 4000), Color("#5a4a36"))
+	draw_rect(Rect2(-4000, field_y, 8000, 6), Color("#6f5c44"))
+	var craters: Array = []
+	for i in 22:
+		var depth := rng.randf()   # 0 = far (top of the field), 1 = near (bottom)
+		craters.append([rng.randf_range(-600, level_size.x + 900), field_y + 14.0 + depth * (ground_y - field_y - 22.0), 28.0 + depth * 80.0, depth])
+	craters.sort_custom(func(a, b): return a[3] < b[3])
+	for c in craters:
+		_crater(Vector2(c[0], c[1]), c[2])
+	# Barbed wire on posts, sandbags.
+	var wire_y := field_y + 30.0
+	for i in 4:
+		var x := rng.randf_range(-400, level_size.x + 600)
+		for k in 4:
+			var px := x + k * 70.0
+			draw_line(Vector2(px, wire_y + 2), Vector2(px + 4, wire_y - 34), Color("#2e2820"), 4.0)
+			if k > 0:
+				var a := Vector2(px - 66, wire_y - 30)
+				var b := Vector2(px + 4, wire_y - 34)
+				draw_line(a, b, Color("#2e2820"), 1.5)
+				draw_line(a + Vector2(0, 16), b + Vector2(0, 16), Color("#2e2820"), 1.5)
+				for j in 6:
+					var q := a.lerp(b, (j + 0.5) / 6.0)
+					draw_line(q + Vector2(-3, -3), q + Vector2(3, 3), Color("#2e2820"), 1.5)
+					draw_line(q + Vector2(-3, 3), q + Vector2(3, -3), Color("#2e2820"), 1.5)
+	for i in 3:
+		var x := rng.randf_range(-300, level_size.x + 500)
+		var sy := field_y + rng.randf_range(40, 90)
+		for row in 2:
+			for k in 4 - row:
+				var bx := x + k * 26.0 + row * 13.0
+				var by := sy - 12.0 - row * 13.0
+				draw_rect(Rect2(bx, by, 24, 12), Color("#7d6a4c"))
+				draw_rect(Rect2(bx, by, 24, 12), Color("#4a3d2c"), false, 1.5)
+	# Two knocked-out tanks: a distant silhouette and a close one, still smouldering.
+	_tank(Vector2(level_size.x * 0.12, field_y + 40.0), 0.5, false)
+	_tank(Vector2(level_size.x * 0.62, ground_y - 14.0), 0.9, true)
+
+
+func _crater(c: Vector2, rw: float) -> void:
+	var rh := rw * 0.38
+	# rim (lighter), bowl (darker), shadow inside
+	draw_set_transform(c, 0.0, Vector2(1.0, rh / rw))
+	draw_circle(Vector2.ZERO, rw + 8.0, Color("#6f5c44"))
+	draw_circle(Vector2.ZERO, rw, Color("#3f3326"))
+	draw_circle(Vector2(0, 4), rw * 0.7, Color("#2c231a"))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func _tank(base: Vector2, s: float, smoke: bool) -> void:
+	var dark := Color("#2a2a22")
+	var body := Color("#4b5236") if smoke else Color("#3b3f2c")
+	var light := Color("#5d654a") if smoke else Color("#474c38")
+	draw_set_transform(base, 0.0, Vector2(s, s))
+	# tracks: a sunken, bent track on the right side
+	draw_rect(Rect2(-120, -40, 230, 44), dark)
+	for i in 6:
+		draw_circle(Vector2(-100 + i * 42, -18), 14.0, Color("#3a3a30"))
+		draw_circle(Vector2(-100 + i * 42, -18), 6.0, dark)
+	draw_line(Vector2(110, -36), Vector2(150, -4), dark, 10.0)   # thrown track
+	# hull, tilted into a crater
+	draw_set_transform(base, deg_to_rad(-6.0), Vector2(s, s))
+	draw_colored_polygon(PackedVector2Array([Vector2(-130, -42), Vector2(120, -42), Vector2(100, -78), Vector2(-110, -78)]), body)
+	draw_colored_polygon(PackedVector2Array([Vector2(-110, -78), Vector2(100, -78), Vector2(90, -86), Vector2(-100, -86)]), light)
+	# turret, blown slightly off its ring
+	draw_set_transform(base + Vector2(10, -84) * s, deg_to_rad(-14.0), Vector2(s, s))
+	draw_colored_polygon(PackedVector2Array([Vector2(-55, 0), Vector2(55, 0), Vector2(40, -34), Vector2(-40, -34)]), body)
+	draw_rect(Rect2(-18, -46, 36, 12), light)   # hatch, open
+	# barrel, bent upwards at the end
+	draw_line(Vector2(50, -18), Vector2(150, -24), dark, 9.0)
+	draw_line(Vector2(150, -24), Vector2(178, -48), dark, 8.0)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# blackened hole in the hull
+	draw_circle(base + Vector2(-40, -62) * s, 14.0 * s, Color("#161612"))
+	draw_circle(base + Vector2(-40, -62) * s, 20.0 * s, Color("#161612", 0.4))
+	if smoke:
+		for k in 8:
+			var age := fmod(t * 0.2 + k * 0.125, 1.0)
+			var p := base + Vector2(-40 + sin(age * 5.0 + k) * 14.0 + age * 50.0, -70 - age * 240.0) * s
+			draw_circle(p, (6.0 + age * 26.0) * s, Color(0.18, 0.17, 0.15, 0.22 * (1.0 - age)))
+		# embers
+		var e := _rng(int(t * 8.0))
+		for k in 5:
+			var p := base + Vector2(-40 + e.randf_range(-12, 12), -62 + e.randf_range(-10, 10)) * s
+			draw_circle(p, 2.0, Color("#ff8a3d", e.randf_range(0.5, 1.0)))
 
 
 func _draw_dashed_rect(r: Rect2, color: Color) -> void:

@@ -10,6 +10,7 @@ const SHOTS := [
 	["settings", "res://scenes/settings.tscn"],
 	["help", "res://scenes/main_menu.tscn"],
 	["help2", "res://scenes/main_menu.tscn"],
+	["battlefield", "res://scenes/level.tscn"],
 	["settings_de", "res://scenes/settings.tscn"],
 	["editor_de", "res://scenes/editor.tscn"],
 ]
@@ -38,6 +39,16 @@ func _ready() -> void:
 	for shot in SHOTS:
 		var scene: Node = (load(shot[1]) as PackedScene).instantiate()
 		get_tree().root.add_child(scene)
+		if shot[0] == "battlefield":
+			scene.queue_free()
+			await get_tree().process_frame
+			var bf: Dictionary = GameState.builtin_levels()[3]
+			bf["background"] = "battlefield"
+			GameState.current_level = bf
+			scene = (load(shot[1]) as PackedScene).instantiate()
+			get_tree().root.add_child(scene)
+			for i in 40:
+				await get_tree().physics_frame
 		if shot[0].ends_with("_de"):
 			TranslationServer.set_locale("de")
 			scene.queue_free()

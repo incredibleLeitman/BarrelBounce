@@ -102,7 +102,7 @@ Saved levels are JSON in `user://levels/<id>.json` (on Windows:
 }
 ```
 
-`background` is one of `space`, `underwater`, `meadow`, `sunset`, `cave` (all drawn
+`background` is one of `space`, `underwater`, `meadow`, `sunset`, `cave`, `battlefield` (all drawn
 procedurally in `scripts/view/backdrop.gd`; pick one under *Settings* in the editor).
 
 ### Best times, ghosts and fair sharing
