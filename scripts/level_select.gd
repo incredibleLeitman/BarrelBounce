@@ -15,6 +15,11 @@ var my_status: Dictionary = {}
 var my_info: Dictionary = {"pending": false, "count": 0, "max": 3}
 var my_loaded := false
 var my_fetching := false
+## World records (id -> fastest verified run) for the rows on screen, and the community
+## rows as last listed, so a record fetch can redraw without reloading the list.
+var records: Dictionary = {}
+var records_fetched: Dictionary = {}
+var community_rows: Array = []
 
 
 func _ready() -> void:
@@ -86,9 +91,35 @@ func _build_ui() -> void:
 
 
 func _refresh() -> void:
+	community_rows.clear()
 	_render()
 	if tab == Tab.MINE and Online.enabled():
 		_fetch_my_levels()
+
+
+## Fetches the world records for [param levels] (dicts with id and rev) once, then redraws.
+func _fetch_records(levels: Array) -> void:
+	if not Online.enabled():
+		return
+	var pairs: Array = []
+	for l in levels:
+		var id := str(l.get("id", ""))
+		if not records_fetched.has(id):
+			records_fetched[id] = true
+			pairs.append("%s:%s" % [id, str(l.get("rev", ""))])
+	if pairs.is_empty():
+		return
+	var shown_tab := tab
+	Online.records(pairs, func(ok: bool, data: Dictionary):
+		if not is_instance_valid(list) or not ok:
+			return
+		var got = data.get("records", {})
+		if typeof(got) != TYPE_DICTIONARY:
+			return
+		for id in got.keys():
+			records[str(id)] = got[id]
+		if tab == shown_tab:
+			_render())
 
 
 ## Asks the server for the status of the player's published levels, then redraws the tab.
@@ -167,16 +198,7 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 	meta_row.add_child(UI.label(tr("by %s  ·  %d cannons  ·  ") % [author, level.get("cannons", []).size()], 16, UI.MUTED))
 	var creator := GameState.creator_proof(level)
 	var creator_is_me := not creator.is_empty() and str(creator.get("player_id", "")) == GameState.player_id()
-	if best >= 0:
-		# Orange when you hold the record: no creator time to beat, or yours is at least as good.
-		var record := creator.is_empty() or creator_is_me or best <= int(creator["ticks"])
-		meta_row.add_child(UI.label(tr("best %s") % Simulation.format_ticks(best), 16, UI.ACCENT if record else UI.MUTED))
-	elif GameState.best_is_stale(id, rev):
-		meta_row.add_child(UI.label("level changed: best time reset", 16, UI.MUTED))
-	else:
-		meta_row.add_child(UI.label("not finished yet", 16, UI.MUTED))
-	if not creator.is_empty() and not creator_is_me:
-		meta_row.add_child(UI.label(tr("  ·  %s: %s") % [str(creator.get("player", "creator")), Simulation.format_ticks(int(creator["ticks"]))], 16, UI.MUTED))
+	_add_times(meta_row, id, rev, int(creator.get("ticks", -1)), str(creator.get("player", "creator")), creator_is_me)
 
 	if editable and Online.enabled():
 		_add_publish_controls(level, id, rev, info, row)
@@ -207,6 +229,29 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 	var play := UI.accent_button("  Play  ", 48, 20)
 	play.pressed.connect(func(): GameState.play_level(level))
 	row.add_child(play)
+
+
+## The times of one level, the same way in every tab: your best (orange when nobody is
+## faster), the creator's time, and the world record with its holder.
+func _add_times(meta_row: HBoxContainer, id: String, rev: String, creator_ticks: int, creator_name: String, creator_is_me: bool) -> void:
+	var best := GameState.best_ticks(id, rev)
+	var rec: Dictionary = records.get(id, {})
+	var rec_is_me := not rec.is_empty() and str(rec.get("player_id", "")) == GameState.player_id()
+	if best >= 0:
+		# Orange when you hold the record: nobody verified is faster, and the creator's
+		# time (when it is not yours) is not better either.
+		var top := (rec.is_empty() or rec_is_me or best <= int(rec["ticks"])) \
+			and (creator_ticks < 0 or creator_is_me or best <= creator_ticks)
+		meta_row.add_child(UI.label(tr("best %s") % Simulation.format_ticks(best), 16, UI.ACCENT if top else UI.MUTED))
+	elif GameState.best_is_stale(id, rev):
+		meta_row.add_child(UI.label("level changed: best time reset", 16, UI.MUTED))
+	else:
+		meta_row.add_child(UI.label("not finished yet", 16, UI.MUTED))
+	if creator_ticks >= 0 and not creator_is_me:
+		meta_row.add_child(UI.label(tr("  ·  %s: %s") % [creator_name, Simulation.format_ticks(creator_ticks)], 16, UI.MUTED))
+	if not rec.is_empty():
+		var holder := GameState.display_name(str(rec.get("player_name", "?")), str(rec.get("player_id", "")))
+		meta_row.add_child(UI.label(tr("  ·  world record %s by %s") % [Simulation.format_ticks(int(rec["ticks"])), holder], 16, UI.ACCENT if rec_is_me else UI.MUTED))
 
 
 ## Publish / Update / Cancel / Unpublish for one of the player's levels, plus a status line
@@ -378,8 +423,10 @@ func _load_community() -> void:
 		var rows: Array = data.get("rows", [])
 		if rows.is_empty():
 			_empty_message("No community levels yet. Publish one of yours!")
+		community_rows = rows
 		for r in rows:
-			_add_community_row(r))
+			_add_community_row(r)
+		_fetch_records(rows))
 
 
 func _add_community_row(r: Dictionary) -> void:
@@ -398,7 +445,11 @@ func _add_community_row(r: Dictionary) -> void:
 	var mine := bool(r.get("mine", false))
 	var status := str(r.get("status", "verified"))
 	var author := GameState.display_name(str(r.get("author_name", "?")), str(r.get("author_id", "")))
-	info.add_child(UI.label(tr("by %s  ·  %s  ·  %d plays  ·  %d stars") % [author, Simulation.format_ticks(int(r.get("proof_ticks", 0))), int(r.get("plays", 0)), int(r.get("stars", 0))], 16, UI.MUTED))
+	var meta_row := HBoxContainer.new()
+	meta_row.add_theme_constant_override("separation", 0)
+	info.add_child(meta_row)
+	meta_row.add_child(UI.label(tr("by %s  ·  %d plays  ·  %d stars  ·  ") % [author, int(r.get("plays", 0)), int(r.get("stars", 0))], 16, UI.MUTED))
+	_add_times(meta_row, id, str(r.get("rev", "")), int(r.get("proof_ticks", -1)), author, mine)
 	if mine:
 		# The author sees their own pending / rejected levels here too, with a way out.
 		match status:
@@ -433,6 +484,26 @@ func _add_community_row(r: Dictionary) -> void:
 				star.text = str(state["count"])
 				star.icon = load("res://assets/icons/%s.svg" % ("star" if want else "star_off"))))
 		row.add_child(star)
+		var remix := UI.icon_button(tr("Remix"), "pen")
+		remix.pressed.connect(func():
+			remix.disabled = true
+			Online.fetch_level(id, func(ok: bool, data: Dictionary):
+				if not ok or typeof(data.get("level")) != TYPE_DICTIONARY:
+					if is_instance_valid(remix):
+						remix.disabled = false
+					UI.toast(UI.root_of(ui), "Could not download the level.", UI.BAD)
+					return
+				# Your own copy: new id, your name, no proof run and no link to the server.
+				var copy: Dictionary = GameState.normalize_level(data["level"])
+				copy["id"] = GameState.new_level_id()
+				copy["name"] = str(copy.get("name", "Level")) + " remix"
+				copy["author"] = GameState.player_name()
+				copy["author_id"] = GameState.player_id()
+				copy.erase("verified")
+				copy.erase("online_id")
+				GameState.editor_level = copy
+				GameState.go(GameState.SCENE_EDITOR)))
+		row.add_child(remix)
 	var play := UI.accent_button("  Play  ", 48, 20)
 	play.pressed.connect(func():
 		play.disabled = true

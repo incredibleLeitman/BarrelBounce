@@ -6,6 +6,7 @@
 // returns JSON {"ok": true, ...} or {"ok": false, "error": "..."}.
 //
 //   GET  leaderboard   level_id, rev [, player_id]      verified runs, fastest first
+//   GET  records       ids=level_id:rev,...              the fastest verified run per level (world records)
 //   POST submit_run    {level_id, rev, player_id, player_name, player_color, ticks, taps[]}
 //   GET  levels        [offset] [, player_id]           community levels: own first, then starred, newest first
 //   GET  level         id [, player_id]                 one level's data (counts a play)
@@ -61,6 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 switch ($action) {
     case 'leaderboard':   leaderboard($pdo, $config); break;
+    case 'records':       records($pdo); break;
     case 'submit_run':    submit_run($pdo, $config, $body); break;
     case 'levels':        list_levels($pdo, $config); break;
     case 'level':         get_level($pdo); break;
@@ -89,8 +91,12 @@ function leaderboard(PDO $pdo, array $config): void {
     $st->execute([$level_id, $rev]);
     $rows = [];
     $rank = 0;
+    $n = 0;
+    $prev = -1;
     foreach ($st as $r) {
-        $rank++;
+        // Equal times share a rank (1, 1, 3): the earlier submission is only listed first.
+        $n++;
+        if ((int)$r['ticks'] !== $prev) { $rank = $n; $prev = (int)$r['ticks']; }
         $rows[] = [
             'rank' => $rank,
             'player_id' => $r['player_id'],
@@ -114,6 +120,27 @@ function leaderboard(PDO $pdo, array $config): void {
     $st = $pdo->prepare("SELECT COUNT(*) FROM runs WHERE level_id = ? AND rev = ? AND status = 'verified'");
     $st->execute([$level_id, $rev]);
     ok(['rows' => $rows, 'mine' => $mine, 'total' => (int)$st->fetchColumn()]);
+}
+
+// World records for a list of levels, for the level lists: id -> fastest verified run.
+function records(PDO $pdo): void {
+    $ids = str_param($_GET['ids'] ?? '', 4000);
+    $out = [];
+    $st = $pdo->prepare("SELECT ticks, player_id, player_name, player_color,
+                                (SELECT COUNT(*) FROM runs r2 WHERE r2.level_id = runs.level_id AND r2.rev = runs.rev AND r2.status = 'verified') AS total
+                         FROM runs WHERE level_id = ? AND rev = ? AND status = 'verified'
+                         ORDER BY ticks ASC, created_at ASC LIMIT 1");
+    foreach (array_slice(array_filter(explode(',', $ids)), 0, 60) as $pair) {
+        $parts = explode(':', $pair, 2);
+        if (count($parts) !== 2) continue;
+        $st->execute([str_param($parts[0], 64), str_param($parts[1], 16)]);
+        $r = $st->fetch();
+        if ($r) {
+            $out[$parts[0]] = ['ticks' => (int)$r['ticks'], 'player_id' => $r['player_id'],
+                'player_name' => $r['player_name'], 'player_color' => $r['player_color'], 'total' => (int)$r['total']];
+        }
+    }
+    ok(['records' => (object)$out]);
 }
 
 function submit_run(PDO $pdo, array $config, array $b): void {

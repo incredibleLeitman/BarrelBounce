@@ -42,6 +42,11 @@ func publish_level(level: Dictionary, cb: Callable) -> void:
 	_call("publish_level", HTTPClient.METHOD_POST, {"level": payload}, cb)
 
 
+## World records for several levels at once: [param pairs] are "level_id:rev" strings.
+func records(pairs: Array, cb: Callable) -> void:
+	_call("records&ids=%s" % ",".join(pairs).uri_encode(), HTTPClient.METHOD_GET, {}, cb)
+
+
 ## Community list: the player's own levels first (any status), then starred, then newest.
 func list_levels(offset: int, cb: Callable) -> void:
 	_call("levels&offset=%d&player_id=%s" % [offset, GameState.player_id().uri_encode()], HTTPClient.METHOD_GET, {}, cb)
