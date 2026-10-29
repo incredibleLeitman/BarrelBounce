@@ -273,12 +273,11 @@ func _add_publish_controls(level: Dictionary, id: String, rev: String, info: VBo
 				line.add_child(UI.label(tr("rejected: %s") % Online.reason_text(str(st.get("reason", ""))), 15, UI.BAD))
 			_:
 				line.add_child(UI.label("waiting for verification (up to 30 minutes)", 15, UI.ACCENT_2))
-		# Send the current version again: a newer revision, or the same one once more (which
-		# re-verifies it and puts the proof run on the leaderboard).
-		if status != "pending":
+		# The server holds an older revision: offer to send the edited level (a new revision
+		# gets re-verified and starts a fresh leaderboard; stars are kept).
+		if status != "pending" and str(st.get("rev", "")) != rev:
 			var update := UI.small_button("  Update  ")
-			if str(st.get("rev", "")) == rev:
-				update.tooltip_text = tr("Send this version again.")
+			update.tooltip_text = tr("Send the edited level to the server. Its times start over; stars stay.")
 			if GameState.can_share(level) and not my_info["pending"]:
 				update.pressed.connect(func(): _publish(level))
 			else:
