@@ -93,6 +93,8 @@ jobs:
               for r in d['rows']:
                   print('  %-24s %-16s %6.2f s  %-9s %s  %s' % (r['level_name'][:24], r['player_name'][:16], r['ticks'] / 60, r['status'], r['reason'], r['created_at']))
           "
+
+      - name: Cache Godot
         if: steps.cfg.outputs.configured == 'true' && steps.fetch.outputs.count != '0'
         id: cache
         uses: actions/cache@v4
