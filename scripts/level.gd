@@ -408,7 +408,9 @@ func _online_after_finish(new_best: bool, ticks: int) -> void:
 				board_box.add_child(UI.label(line, 15, UI.ACCENT if mine else UI.TEXT))
 			var me = data.get("mine")
 			if typeof(me) == TYPE_DICTIONARY and str(me.get("status", "")) == "pending":
-				board_box.add_child(UI.label(tr("Your %s run is waiting for verification.") % Simulation.format_ticks(int(me.get("ticks", 0))), 13, UI.MUTED)))
+				board_box.add_child(UI.label(tr("Your %s run is waiting for verification (up to 30 minutes).") % Simulation.format_ticks(int(me.get("ticks", 0))), 13, UI.MUTED))
+			elif typeof(me) == TYPE_DICTIONARY and str(me.get("status", "")) == "rejected":
+				board_box.add_child(UI.label(tr("Your %s run was rejected: %s.") % [Simulation.format_ticks(int(me.get("ticks", 0))), Online.reason_text(str(me.get("reason", "")))], 13, UI.BAD)))
 	if new_best:
 		Online.submit_run(level, rev, ticks, taps, func(_ok: bool, _data: Dictionary): show_board.call())
 	else:

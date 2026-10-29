@@ -30,10 +30,21 @@ trusts a client's time.
   *pending* and appears on the leaderboard once verified. The win panel shows the top of the
   leaderboard and your rank.
 - *Publish* on one of your levels in the level select uploads it (`publish_level`) with your
-  proof run. It appears under *Community* for everyone once verified. Re-publishing an edited
-  level replaces it; the old times no longer apply because the revision changed.
-- The *Community* tab lists verified levels; *Play* downloads the level and keeps it in a local
-  cache. Runs on community levels go to the same leaderboard table.
+  proof run. It is *pending* until the verifier replayed the proof, then listed under
+  *Community* for everyone; a rejected level shows the verifier's reason to its author.
+  Re-publishing an edited level replaces it; the old times no longer apply because the
+  revision changed. A player may have one level pending at a time and at most
+  `max_levels_per_player` (3) levels on the server; *Cancel* / *Unpublish* (`unpublish`)
+  removes a level together with its runs and stars.
+- The *Community* tab (`levels`) lists verified levels plus the player's own pending and
+  rejected ones: own levels first, then the ones the player starred (`star`), then newest
+  first. *Play* downloads the level. Runs on community levels go to the same leaderboard table.
+
+## Upgrading an existing database
+
+Databases created before `migrate_002.sql` existed need that file run once (phpMyAdmin > SQL):
+it adds the `reason` columns, the `stars` table and an index. Also add
+`'max_levels_per_player' => 3` to `config.php` (3 is the default when missing).
 
 ## API
 
@@ -43,11 +54,14 @@ All actions: `api.php?action=NAME`. POST bodies are JSON. Responses are JSON wit
 |---|---|---|
 | `leaderboard` | GET | `level_id`, `rev`, optional `player_id` → `rows`, `mine`, `total` |
 | `submit_run` | POST | `level_id`, `rev`, `player_id`, `player_name`, `player_color`, `ticks`, `taps[]` |
-| `levels` | GET | `offset` → verified levels, newest first |
-| `level` | GET | `id` → the level JSON |
-| `publish_level` | POST | `level` (full level JSON with `verified` proof) |
+| `levels` | GET | `offset`, `player_id` → levels with `status`, `stars`, `starred`, `mine`: own first, then starred, then newest |
+| `level` | GET | `id`, `player_id` → the level JSON (authors can fetch their own unverified ones) |
+| `publish_level` | POST | `level` (full level JSON with `verified` proof); fails with `code` `pending_exists` or `limit` |
+| `my_levels` | GET | `player_id` → the player's levels with `status` / `reason`, `count`, `pending`, `max` |
+| `unpublish` | POST | `level_id`, `player_id` → removes the level, its runs and stars |
+| `star` | POST | `level_id`, `player_id`, `on` → `stars` count |
 | `pending` | GET | `key` → pending runs and levels for the verifier |
-| `resolve` | POST | `key`, `runs[]`, `levels[]` with `status` verified / rejected |
+| `resolve` | POST | `key`, `runs[]`, `levels[]` with `status` verified / rejected and a `reason` code |
 
 Everything is CORS-enabled so the web build on GitHub Pages can call it.
 
@@ -56,5 +70,7 @@ Everything is CORS-enabled so the web build on GitHub Pages can call it.
 There is no login: a player is identified by the random id in their profile, which is also
 what ties runs to names and colours. Nothing a client sends is trusted for ranking until the
 verifier replayed it, so a forged time never reaches the board. Spam is limited by size
-checks and one row per player and level revision; if it ever becomes a problem, put the
-folder behind a hosting-level rate limit.
+checks, one row per player and level revision, one pending level per player and the cap on
+published levels; if it ever becomes a problem, put the folder behind a hosting-level rate
+limit. Whoever knows a player id can unpublish that player's levels: ids are random and never
+shown, which is the same trust the leaderboard names rely on.

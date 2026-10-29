@@ -126,6 +126,16 @@ published levels. Nothing is ranked until `.github/workflows/verify.yml` has rep
 with the game's own simulation (`tools/verify_runs.gd`), every 30 minutes. With `API_URL`
 empty the game is fully offline.
 
+Publishing: a level you finished gets *Publish* under *My levels*. It is then *waiting for
+verification (up to 30 minutes)* and can be cancelled; once verified it is listed under
+*Community* and shows *published · plays · stars*; if the verifier rejects it, the reason is
+shown and you can fix the level and publish again. A player can have one submission pending
+at a time and at most 3 published levels (`max_levels_per_player` in `config.php`);
+*Unpublish* removes a level with all times on it. Other players' levels can be starred; the
+community list shows your own levels first, then starred ones, then the newest. Levels are
+identified by their random id and authors by their random player id, so equal names never
+collide.
+
 ### Languages
 
 All visible text goes through Godot's translation system with English as the source

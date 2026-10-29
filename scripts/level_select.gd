@@ -9,6 +9,12 @@ var ui: CanvasLayer
 var list: VBoxContainer
 var tab_buttons: Array = []
 var backdrop: Backdrop
+## Server-side status of the player's published levels (id -> row of my_levels) and the
+## totals that gate publishing; fetched whenever the My levels tab is shown.
+var my_status: Dictionary = {}
+var my_info: Dictionary = {"pending": false, "count": 0, "max": 3}
+var my_loaded := false
+var my_fetching := false
 
 
 func _ready() -> void:
@@ -80,6 +86,30 @@ func _build_ui() -> void:
 
 
 func _refresh() -> void:
+	_render()
+	if tab == Tab.MINE and Online.enabled():
+		_fetch_my_levels()
+
+
+## Asks the server for the status of the player's published levels, then redraws the tab.
+func _fetch_my_levels() -> void:
+	if my_fetching:
+		return
+	my_fetching = true
+	Online.my_levels(func(ok: bool, data: Dictionary):
+		my_fetching = false
+		if not is_instance_valid(list) or not ok:
+			return
+		my_status.clear()
+		for r in data.get("rows", []):
+			my_status[str(r.get("id", ""))] = r
+		my_info = {"pending": bool(data.get("pending", false)), "count": int(data.get("count", 0)), "max": int(data.get("max", 3))}
+		my_loaded = true
+		if tab == Tab.MINE:
+			_render())
+
+
+func _render() -> void:
 	for i in tab_buttons.size():
 		tab_buttons[i].button_pressed = i == tab
 	for c in list.get_children():
@@ -89,6 +119,10 @@ func _refresh() -> void:
 			var levels := GameState.user_levels()
 			if levels.is_empty():
 				_empty_message("You have no levels yet. Hit “+ New level” to build one!")
+			elif Online.enabled() and my_loaded:
+				var hint := UI.label(tr("Published %d of %d levels  ·  one submission at a time, verification takes up to 30 minutes") % [my_info["count"], my_info["max"]], 15, UI.MUTED, true)
+				hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				list.add_child(hint)
 			for l in levels:
 				_add_row(l, true)
 		Tab.BUILTIN:
@@ -145,13 +179,7 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 		meta_row.add_child(UI.label(tr("  ·  %s: %s") % [str(creator.get("player", "creator")), Simulation.format_ticks(int(creator["ticks"]))], 16, UI.MUTED))
 
 	if editable and Online.enabled():
-		var publish := UI.small_button("  Publish  ")
-		if GameState.can_share(level):
-			publish.pressed.connect(func(): _publish(level))
-		else:
-			publish.disabled = true
-			publish.tooltip_text = tr("Finish this version of the level once, then you can publish it.")
-		row.add_child(publish)
+		_add_publish_controls(level, id, rev, info, row)
 	if editable:
 		var share := UI.small_button("  Share  ")
 		if GameState.can_share(level):
@@ -179,6 +207,71 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 	var play := UI.accent_button("  Play  ", 48, 20)
 	play.pressed.connect(func(): GameState.play_level(level))
 	row.add_child(play)
+
+
+## Publish / Update / Cancel / Unpublish for one of the player's levels, plus a status line
+## ("waiting for verification", "published", "rejected: why") from the server.
+func _add_publish_controls(level: Dictionary, id: String, rev: String, info: VBoxContainer, row: HBoxContainer) -> void:
+	var st: Dictionary = my_status.get(id, {})
+	# A level the server does not know any more (removed elsewhere) counts as unpublished.
+	var published := level.has("online_id") and (not my_loaded or not st.is_empty())
+	var status := str(st.get("status", "pending")) if published else ""
+	if published:
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 0)
+		info.add_child(line)
+		match status:
+			"verified":
+				line.add_child(UI.label(tr("published  ·  %d plays  ·  %d stars") % [int(st.get("plays", 0)), int(st.get("stars", 0))], 15, UI.GOOD))
+			"rejected":
+				line.add_child(UI.label(tr("rejected: %s") % Online.reason_text(str(st.get("reason", ""))), 15, UI.BAD))
+			_:
+				line.add_child(UI.label("waiting for verification (up to 30 minutes)", 15, UI.ACCENT_2))
+		# The server holds an older revision: offer to send the new one.
+		if status != "pending" and str(st.get("rev", "")) != rev:
+			var update := UI.small_button("  Update  ")
+			if GameState.can_share(level) and not my_info["pending"]:
+				update.pressed.connect(func(): _publish(level))
+			else:
+				update.disabled = true
+				update.tooltip_text = tr("Finish this version of the level once, then you can publish it.") if not GameState.can_share(level) \
+					else tr("You already have a level waiting for verification. Wait for it or cancel it first.")
+			row.add_child(update)
+		var remove := UI.small_button("  Cancel  " if status == "pending" else "  Unpublish  ")
+		remove.pressed.connect(func():
+			var title := "Cancel the submission?" if status == "pending" else "Unpublish level?"
+			var msg := tr("“%s” is taken off the server; other players' times on it are lost.") % str(level.get("name", ""))
+			UI.confirm(UI.root_of(ui), title, msg, "Cancel submission" if status == "pending" else "Unpublish", func():
+				_unpublish(id, str(level.get("name", "")))))
+		row.add_child(remove)
+		return
+	var publish := UI.small_button("  Publish  ")
+	if not GameState.can_share(level):
+		publish.disabled = true
+		publish.tooltip_text = tr("Finish this version of the level once, then you can publish it.")
+	elif my_loaded and my_info["pending"]:
+		publish.disabled = true
+		publish.tooltip_text = tr("You already have a level waiting for verification. Wait for it or cancel it first.")
+	elif my_loaded and int(my_info["count"]) >= int(my_info["max"]):
+		publish.disabled = true
+		publish.tooltip_text = tr("You can have at most %d published levels. Unpublish one first.") % int(my_info["max"])
+	else:
+		publish.pressed.connect(func(): _publish(level))
+	row.add_child(publish)
+
+
+func _unpublish(id: String, level_name: String) -> void:
+	var root := UI.root_of(ui)
+	Online.unpublish(id, func(ok: bool, data: Dictionary):
+		if not is_instance_valid(root):
+			return
+		if ok:
+			GameState.mark_unpublished(id)
+			my_status.erase(id)
+			UI.toast(root, tr("“%s” was removed from the server.") % level_name, UI.GOOD)
+			_refresh()
+		else:
+			UI.toast(root, tr("Could not remove the level: %s") % Online.error_text(data), UI.BAD))
 
 
 # ---------------------------------------------------------------- level codes
@@ -263,9 +356,10 @@ func _publish(level: Dictionary) -> void:
 		if ok:
 			level["online_id"] = str(level["id"])
 			GameState.save_user_level(level)
-			UI.toast(root, "Published. It appears under Community once verified.", UI.GOOD)
+			UI.toast(root, "Published. It appears under Community once verified (up to 30 minutes).", UI.GOOD)
+			_refresh()
 		else:
-			UI.toast(root, tr("Publish failed: %s") % str(data.get("error", "offline")), UI.BAD))
+			UI.toast(root, tr("Publish failed: %s") % Online.error_text(data), UI.BAD))
 
 
 func _load_community() -> void:
@@ -300,10 +394,46 @@ func _add_community_row(r: Dictionary) -> void:
 	info.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(info)
 	info.add_child(UI.label(str(r.get("name", "Untitled")), 26))
-	var author := GameState.display_name(str(r.get("author_name", "?")), str(r.get("author_id", "")))
-	info.add_child(UI.label(tr("by %s  ·  %s  ·  %d plays") % [author, Simulation.format_ticks(int(r.get("proof_ticks", 0))), int(r.get("plays", 0))], 16, UI.MUTED))
-	var play := UI.accent_button("  Play  ", 48, 20)
 	var id := str(r.get("id", ""))
+	var mine := bool(r.get("mine", false))
+	var status := str(r.get("status", "verified"))
+	var author := GameState.display_name(str(r.get("author_name", "?")), str(r.get("author_id", "")))
+	info.add_child(UI.label(tr("by %s  ·  %s  ·  %d plays  ·  %d stars") % [author, Simulation.format_ticks(int(r.get("proof_ticks", 0))), int(r.get("plays", 0)), int(r.get("stars", 0))], 16, UI.MUTED))
+	if mine:
+		# The author sees their own pending / rejected levels here too, with a way out.
+		match status:
+			"pending":
+				info.add_child(UI.label("waiting for verification (up to 30 minutes)", 15, UI.ACCENT_2))
+			"rejected":
+				info.add_child(UI.label(tr("rejected: %s  ·  fix it under My levels and publish again") % Online.reason_text(str(r.get("reason", ""))), 15, UI.BAD))
+		var remove := UI.small_button("  Cancel  " if status == "pending" else "  Unpublish  ")
+		remove.pressed.connect(func():
+			var title := "Cancel the submission?" if status == "pending" else "Unpublish level?"
+			var msg := tr("“%s” is taken off the server; other players' times on it are lost.") % str(r.get("name", ""))
+			UI.confirm(UI.root_of(ui), title, msg, "Cancel submission" if status == "pending" else "Unpublish", func():
+				_unpublish(id, str(r.get("name", "")))))
+		row.add_child(remove)
+	else:
+		var starred := bool(r.get("starred", false))
+		var count := int(r.get("stars", 0))
+		var star := UI.icon_button(str(count), "star" if starred else "star_off")
+		star.tooltip_text = tr("Mark as a favourite: starred levels are listed first.")
+		star.pressed.connect(func():
+			starred = not starred
+			star.disabled = true
+			Online.star(id, starred, func(ok: bool, data: Dictionary):
+				if not is_instance_valid(star):
+					return
+				star.disabled = false
+				if not ok:
+					starred = not starred
+					UI.toast(UI.root_of(ui), tr("Could not star the level: %s") % Online.error_text(data), UI.BAD)
+					return
+				count = int(data.get("stars", count))
+				star.text = str(count)
+				star.icon = load("res://assets/icons/%s.svg" % ("star" if starred else "star_off"))))
+		row.add_child(star)
+	var play := UI.accent_button("  Play  ", 48, 20)
 	play.pressed.connect(func():
 		play.disabled = true
 		play.text = tr("  …  ")

@@ -6,7 +6,13 @@ extends SceneTree
 ##   godot --headless -s tools/verify_runs.gd -- pending.json results.json
 ##
 ## A run is verified when its taps finish the level in exactly the claimed ticks on the
-## claimed revision. A level is verified when its proof run does the same.
+## claimed revision. A level is verified when its proof run does the same. Rejections carry
+## a short reason code the game turns into a message for the author:
+##   bad_data       the level JSON is unreadable or has no proof run
+##   rev_mismatch   the level content differs from the one the proof run was made on
+##   no_finish      replaying the taps does not reach the finish gate
+##   time_mismatch  the taps finish the level, but not in the claimed time
+##   unknown_level  (runs only) the level is not built-in and not published
 
 ## Loaded at run time (not preloaded) so that a project that was not imported yet, where
 ## class names do not resolve, makes this script exit with an error instead of idling.
@@ -51,34 +57,50 @@ func _init() -> void:
 
 	for l in data.get("levels", []):
 		var level = l.get("data")
-		var status := "rejected"
+		var reason := "bad_data"
 		if typeof(level) == TYPE_DICTIONARY:
 			level = CheckScript.normalize(level)
 			var v = level.get("verified")
 			if typeof(v) == TYPE_DICTIONARY and typeof(v.get("taps")) == TYPE_ARRAY:
 				var rev: String = CheckScript.level_hash(level)
-				if str(v.get("rev", "")) == rev and str(l.get("rev", "")) == rev:
+				if str(v.get("rev", "")) != rev or str(l.get("rev", "")) != rev:
+					reason = "rev_mismatch"
+				else:
 					var ticks: int = CheckScript.verify_run(level, v["taps"])
-					if ticks > 0 and ticks == int(v.get("ticks", -2)):
-						status = "verified"
+					if ticks <= 0:
+						reason = "no_finish"
+					elif ticks != int(v.get("ticks", -2)):
+						reason = "time_mismatch"
+					else:
+						reason = ""
 						levels_by_id[str(l["id"])] = level
-		results["levels"].append({"id": str(l.get("id", "")), "status": status})
+		var status := "verified" if reason == "" else "rejected"
+		results["levels"].append({"id": str(l.get("id", "")), "status": status, "reason": reason})
 		if status == "verified": verified += 1
 		else: rejected += 1
-		print("level %-24s %s" % [str(l.get("id", "")), status])
+		print("level %-24s %s %s" % [str(l.get("id", "")), status, reason])
 
 	for r in data.get("runs", []):
-		var status := "rejected"
+		var reason := "bad_data"
 		var level = levels_by_id.get(str(r.get("level_id", "")))
-		if typeof(level) == TYPE_DICTIONARY and typeof(r.get("taps")) == TYPE_ARRAY:
-			if CheckScript.level_hash(level) == str(r.get("rev", "")):
+		if typeof(level) != TYPE_DICTIONARY:
+			reason = "unknown_level"
+		elif typeof(r.get("taps")) == TYPE_ARRAY:
+			if CheckScript.level_hash(level) != str(r.get("rev", "")):
+				reason = "rev_mismatch"
+			else:
 				var ticks: int = CheckScript.verify_run(level, r["taps"])
-				if ticks > 0 and ticks == int(r.get("ticks", -2)):
-					status = "verified"
-		results["runs"].append({"id": int(r.get("id", 0)), "status": status})
+				if ticks <= 0:
+					reason = "no_finish"
+				elif ticks != int(r.get("ticks", -2)):
+					reason = "time_mismatch"
+				else:
+					reason = ""
+		var status := "verified" if reason == "" else "rejected"
+		results["runs"].append({"id": int(r.get("id", 0)), "status": status, "reason": reason})
 		if status == "verified": verified += 1
 		else: rejected += 1
-		print("run %6d on %-24s %s" % [int(r.get("id", 0)), str(r.get("level_id", "")), status])
+		print("run %6d on %-24s %s %s" % [int(r.get("id", 0)), str(r.get("level_id", "")), status, reason])
 
 	var out := FileAccess.open(args[1], FileAccess.WRITE)
 	out.store_string(JSON.stringify(results))

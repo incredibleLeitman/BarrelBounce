@@ -19,4 +19,6 @@ return [
     'max_taps' => 2000,
     'leaderboard_limit' => 20,
     'levels_page' => 30,
+    // How many levels one player may have published at a time (pending ones count).
+    'max_levels_per_player' => 3,
 ];

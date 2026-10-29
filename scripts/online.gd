@@ -42,12 +42,53 @@ func publish_level(level: Dictionary, cb: Callable) -> void:
 	_call("publish_level", HTTPClient.METHOD_POST, {"level": payload}, cb)
 
 
+## Community list: the player's own levels first (any status), then starred, then newest.
 func list_levels(offset: int, cb: Callable) -> void:
-	_call("levels&offset=%d" % offset, HTTPClient.METHOD_GET, {}, cb)
+	_call("levels&offset=%d&player_id=%s" % [offset, GameState.player_id().uri_encode()], HTTPClient.METHOD_GET, {}, cb)
 
 
 func fetch_level(level_id: String, cb: Callable) -> void:
-	_call("level&id=%s" % level_id.uri_encode(), HTTPClient.METHOD_GET, {}, cb)
+	_call("level&id=%s&player_id=%s" % [level_id.uri_encode(), GameState.player_id().uri_encode()], HTTPClient.METHOD_GET, {}, cb)
+
+
+## Status of every level this player published: rows with status / reason, count, pending, max.
+func my_levels(cb: Callable) -> void:
+	_call("my_levels&player_id=%s" % GameState.player_id().uri_encode(), HTTPClient.METHOD_GET, {}, cb)
+
+
+## Removes a published level (or cancels a pending submission) together with its runs.
+func unpublish(level_id: String, cb: Callable) -> void:
+	_call("unpublish", HTTPClient.METHOD_POST, {"level_id": level_id, "player_id": GameState.player_id()}, cb)
+
+
+func star(level_id: String, on: bool, cb: Callable) -> void:
+	_call("star", HTTPClient.METHOD_POST, {"level_id": level_id, "player_id": GameState.player_id(), "on": on}, cb)
+
+
+## Turns a server error into a message for the player. [param data] is the callback's data.
+func error_text(data: Dictionary) -> String:
+	match str(data.get("code", "")):
+		"pending_exists":
+			return tr("You already have a level waiting for verification. Wait for it or cancel it first.")
+		"limit":
+			return tr("You can have at most %d published levels. Unpublish one first.") % 3
+	return str(data.get("error", "offline"))
+
+
+## The verifier's rejection codes as text.
+func reason_text(code: String) -> String:
+	match code:
+		"rev_mismatch":
+			return tr("the level was changed after its proof run")
+		"no_finish":
+			return tr("the proof run does not reach the finish")
+		"time_mismatch":
+			return tr("the proof run's time does not match")
+		"unknown_level":
+			return tr("the level is not published")
+		"bad_data":
+			return tr("the level data could not be read")
+	return code
 
 
 # ---------------------------------------------------------------- plumbing

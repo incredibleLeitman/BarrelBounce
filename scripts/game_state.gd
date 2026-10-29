@@ -298,6 +298,14 @@ func save_user_level(level: Dictionary) -> bool:
 	return true
 
 
+## Called after a level was removed from the server: the local copy stays, unpublished.
+func mark_unpublished(level_id: String) -> void:
+	for l in user_levels():
+		if str(l.get("id", "")) == level_id and l.has("online_id"):
+			l.erase("online_id")
+			save_user_level(l)
+
+
 func delete_user_level(level_id: String) -> void:
 	var dir := DirAccess.open(USER_DIR)
 	if dir and dir.file_exists(level_id + ".json"):
