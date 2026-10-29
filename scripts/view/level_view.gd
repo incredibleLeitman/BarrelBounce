@@ -92,6 +92,9 @@ func refresh() -> void:
 	player_node.update_from(sim)
 	for g in ghosts:
 		g["node"].update_from(g["sim"])
+	var bg := str(sim.level.get("background", "space"))
+	if bg != backdrop.theme_name:
+		backdrop.theme_name = bg
 
 
 ## Replaces the ghosts: [param sims] is a list of {"sim": Simulation, "color": Color}.
@@ -114,9 +117,6 @@ func bind_ghosts(sims: Array) -> void:
 func clear_ghost_trails() -> void:
 	for g in ghosts:
 		g["node"].clear_trail()
-	var bg := str(sim.level.get("background", "space"))
-	if bg != backdrop.theme_name:
-		backdrop.theme_name = bg
 
 
 func set_selection(indices: Array, finish_selected: bool) -> void:
