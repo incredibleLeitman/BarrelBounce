@@ -202,14 +202,11 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 	_add_times(meta_row, id, rev, int(creator.get("ticks", -1)), str(creator.get("player", "creator")), creator_is_me)
 
 	if editable and Online.enabled():
-		_add_publish_controls(level, id, rev, info, row)
+		_add_status_line(level, id, info)
 	if editable:
+		# One button for both ways of sharing: online (publish / update / unpublish) and as a code.
 		var share := UI.small_button("  Share  ")
-		if GameState.can_share(level):
-			share.pressed.connect(func(): _show_share(level))
-		else:
-			share.disabled = true
-			share.tooltip_text = tr("Finish this version of the level once, then you can share it.")
+		share.pressed.connect(func(): _show_share(level))
 		row.add_child(share)
 		var del := UI.icon_button("", "trash")
 		del.pressed.connect(func():
@@ -255,57 +252,90 @@ func _add_times(meta_row: HBoxContainer, id: String, rev: String, creator_ticks:
 		meta_row.add_child(UI.label(tr("  ·  world record %s by %s") % [Simulation.format_ticks(int(rec["ticks"])), holder], 16, UI.ACCENT if rec_is_me else UI.MUTED))
 
 
-## Publish / Update / Cancel / Unpublish for one of the player's levels, plus a status line
-## ("waiting for verification", "published", "rejected: why") from the server.
-func _add_publish_controls(level: Dictionary, id: String, rev: String, info: VBoxContainer, row: HBoxContainer) -> void:
+## The server's view of one of the player's levels: {} when it is not published (or the
+## server does not know it any more), else the my_levels row with status / reason / rev.
+func _server_status(level: Dictionary, id: String) -> Dictionary:
 	var st: Dictionary = my_status.get(id, {})
-	# A level the server does not know any more (removed elsewhere) counts as unpublished.
-	var published := level.has("online_id") and (not my_loaded or not st.is_empty())
-	var status := str(st.get("status", "pending")) if published else ""
-	if published:
-		var line := HBoxContainer.new()
-		line.add_theme_constant_override("separation", 0)
-		info.add_child(line)
-		match status:
-			"verified":
-				line.add_child(UI.label(tr("published  ·  %d plays  ·  %d stars") % [int(st.get("plays", 0)), int(st.get("stars", 0))], 15, UI.GOOD))
-			"rejected":
-				line.add_child(UI.label(tr("rejected: %s") % Online.reason_text(str(st.get("reason", ""))), 15, UI.BAD))
-			_:
-				line.add_child(UI.label("waiting for verification (up to 30 minutes)", 15, UI.ACCENT_2))
-		# The server holds an older revision: offer to send the edited level (a new revision
-		# gets re-verified and starts a fresh leaderboard; stars are kept).
+	if not level.has("online_id") or (my_loaded and st.is_empty()):
+		return {}
+	return st if not st.is_empty() else {"status": "pending"}
+
+
+## One line under the level name: waiting for verification / published / rejected and why.
+func _add_status_line(level: Dictionary, id: String, info: VBoxContainer) -> void:
+	var st := _server_status(level, id)
+	if st.is_empty():
+		return
+	info.add_child(_status_label(st))
+
+
+func _status_label(st: Dictionary) -> Label:
+	match str(st.get("status", "pending")):
+		"verified":
+			return UI.label(tr("published  ·  %d plays  ·  %d stars") % [int(st.get("plays", 0)), int(st.get("stars", 0))], 15, UI.GOOD)
+		"rejected":
+			return UI.label(tr("rejected: %s") % Online.reason_text(str(st.get("reason", ""))), 15, UI.BAD)
+	return UI.label("waiting for verification (up to 30 minutes)", 15, UI.ACCENT_2)
+
+
+## The "Online" block of the share dialog: the level's state and the one action that fits
+## it (Publish, Update, Cancel or Unpublish), disabled with the reason when it cannot run.
+func _online_block(level: Dictionary, id: String, rev: String, body: VBoxContainer) -> void:
+	var st := _server_status(level, id)
+	var status := str(st.get("status", "")) if not st.is_empty() else ""
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	body.add_child(row)
+	var text := VBoxContainer.new()
+	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(text)
+	if st.is_empty():
+		text.add_child(UI.label("Not published. Published levels appear under Community for everyone, with a world ranking.", 15, UI.MUTED, true))
+	else:
+		text.add_child(_status_label(st))
 		if status != "pending" and str(st.get("rev", "")) != rev:
-			var update := UI.small_button("  Update  ")
-			update.tooltip_text = tr("Send the edited level to the server. Its times start over; stars stay.")
-			if GameState.can_share(level) and not my_info["pending"]:
-				update.pressed.connect(func(): _publish(level))
-			else:
-				update.disabled = true
-				update.tooltip_text = tr("Finish this version of the level once, then you can publish it.") if not GameState.can_share(level) \
-					else tr("You already have a level waiting for verification. Wait for it or cancel it first.")
-			row.add_child(update)
-		var remove := UI.small_button("  Cancel  " if status == "pending" else "  Unpublish  ")
-		remove.pressed.connect(func():
+			text.add_child(UI.label("You edited the level since: send the new version. Its times start over; stars stay.", 15, UI.MUTED, true))
+	var why := ""
+	var action: Button
+	if status == "pending":
+		action = UI.small_button("  Cancel  ")
+	elif not st.is_empty() and str(st.get("rev", "")) == rev:
+		action = UI.small_button("  Unpublish  ")
+	else:
+		action = UI.accent_button("  Update  " if not st.is_empty() else "  Publish  ", 48, 20)
+		if not GameState.can_share(level):
+			why = tr("Finish this version of the level once, then you can publish it.")
+		elif my_loaded and my_info["pending"]:
+			why = tr("You already have a level waiting for verification. Wait for it or cancel it first.")
+		elif st.is_empty() and my_loaded and int(my_info["count"]) >= int(my_info["max"]):
+			why = tr("You can have at most %d published levels. Unpublish one first.") % int(my_info["max"])
+	row.add_child(action)
+	if why != "":
+		action.disabled = true
+		action.tooltip_text = why
+		text.add_child(UI.label(why, 14, UI.BAD, true))
+		return
+	if status == "pending" or (not st.is_empty() and str(st.get("rev", "")) == rev):
+		action.pressed.connect(func():
 			var title := "Cancel the submission?" if status == "pending" else "Unpublish level?"
 			var msg := tr("“%s” is taken off the server; other players' times on it are lost.") % str(level.get("name", ""))
 			UI.confirm(UI.root_of(ui), title, msg, "Cancel submission" if status == "pending" else "Unpublish", func():
+				_close_dialog(body)
 				_unpublish(id, str(level.get("name", "")))))
-		row.add_child(remove)
-		return
-	var publish := UI.small_button("  Publish  ")
-	if not GameState.can_share(level):
-		publish.disabled = true
-		publish.tooltip_text = tr("Finish this version of the level once, then you can publish it.")
-	elif my_loaded and my_info["pending"]:
-		publish.disabled = true
-		publish.tooltip_text = tr("You already have a level waiting for verification. Wait for it or cancel it first.")
-	elif my_loaded and int(my_info["count"]) >= int(my_info["max"]):
-		publish.disabled = true
-		publish.tooltip_text = tr("You can have at most %d published levels. Unpublish one first.") % int(my_info["max"])
 	else:
-		publish.pressed.connect(func(): _publish(level))
-	row.add_child(publish)
+		action.pressed.connect(func():
+			_close_dialog(body)
+			_publish(level))
+
+
+## Closes the dialog that [param body] belongs to (its shade is the ColorRect ancestor).
+func _close_dialog(body: Node) -> void:
+	var shade: Node = body
+	while shade and not (shade is ColorRect):
+		shade = shade.get_parent()
+	if shade:
+		shade.queue_free()
 
 
 func _unpublish(id: String, level_name: String) -> void:
@@ -326,15 +356,25 @@ func _unpublish(id: String, level_name: String) -> void:
 
 func _show_share(level: Dictionary) -> void:
 	var root := UI.root_of(ui)
-	var body := UI.dialog(root, "Share “%s”" % str(level.get("name", "")), 640)
-	body.add_child(UI.label(tr("Send this code to a friend. They paste it under “Import code”. It carries a %s run as proof the level can be finished.") % Simulation.format_ticks(int(GameState.proof_for(level)["ticks"])), 16, UI.MUTED, true))
+	var body := UI.dialog(root, "Share “%s”" % str(level.get("name", "")), 680)
+	var id := str(level.get("id", ""))
+	var rev := GameState.level_hash(level)
+	if Online.enabled():
+		body.add_child(UI.label("Online", 20))
+		_online_block(level, id, rev, body)
+		body.add_child(UI.spacer(6))
+	body.add_child(UI.label("As a code", 20))
+	if not GameState.can_share(level):
+		body.add_child(UI.label("Finish this version of the level once, then you can share it as a code.", 15, UI.MUTED, true))
+		return
+	body.add_child(UI.label(tr("Send this code to a friend. They paste it under “Import code”. It carries a %s run as proof the level can be finished.") % Simulation.format_ticks(int(GameState.proof_for(level)["ticks"])), 15, UI.MUTED, true))
 	var code := GameState.level_to_code(level)
 	var box := TextEdit.new()
 	box.text = code
 	box.editable = false
 	box.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-	box.custom_minimum_size = Vector2(0, 160)
-	box.add_theme_font_size_override("font_size", 14)
+	box.custom_minimum_size = Vector2(0, 110)
+	box.add_theme_font_size_override("font_size", 13)
 	body.add_child(box)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
@@ -344,7 +384,7 @@ func _show_share(level: Dictionary) -> void:
 		DisplayServer.clipboard_set(code)
 		UI.toast(root, "Code copied", UI.GOOD))
 	row.add_child(copy)
-	body.add_child(UI.label(tr("%d characters") % code.length(), 13, UI.MUTED))
+	row.add_child(UI.label(tr("%d characters") % code.length(), 13, UI.MUTED))
 	# The whole code is selected from the start, ready for Ctrl+C.
 	box.call_deferred("grab_focus")
 	box.call_deferred("select_all")
@@ -376,12 +416,7 @@ func _show_import() -> void:
 			status.text = tr("That is not a valid level code, or its proof run does not finish the level.")
 			return
 		if GameState.save_user_level(level):
-			# Close the dialog: its shade is the ColorRect ancestor of the body.
-			var shade: Node = body
-			while shade and not (shade is ColorRect):
-				shade = shade.get_parent()
-			if shade:
-				shade.queue_free()
+			_close_dialog(body)
 			tab = Tab.MINE
 			_refresh()
 			UI.toast(root, tr("Imported “%s” by %s") % [str(level.get("name", "")), GameState.display_name(str(level.get("author", "?")), str(level.get("author_id", "")))], UI.GOOD)

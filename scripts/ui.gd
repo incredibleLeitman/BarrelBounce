@@ -205,8 +205,12 @@ static func dialog(parent: Control, title_text: String, width: float = 720.0) ->
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 8)
 	scroll.add_child(body)
-	# Keep the dialog inside the screen on short displays.
-	scroll.custom_minimum_size.y = minf(520.0, parent.size.y - 140.0)
+	# As tall as its content, capped so the dialog stays inside the screen on short displays
+	# (then the body scrolls).
+	var cap := minf(520.0, parent.size.y - 140.0)
+	var fit := func(): scroll.custom_minimum_size.y = minf(body.get_combined_minimum_size().y + 4.0, cap)
+	body.resized.connect(fit)
+	fit.call_deferred()
 	return body
 
 
