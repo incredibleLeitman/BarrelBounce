@@ -58,7 +58,8 @@ func solve(level: Dictionary, max_seconds: float) -> Dictionary:
 		var cyc := SimulationScript.cannon_cycle_ticks(c)
 		level_cycle = maxi(level_cycle, cyc)
 		if cyc > 0:
-			phase = phase * cyc / _gcd(phase, cyc)
+			@warning_ignore("integer_division")
+			phase = phase * cyc / _gcd(phase, cyc)   # exact: the gcd divides the product
 	if phase > MAX_TICKS:
 		phase = 0   # no useful periodicity: fall back to raw ticks
 	# Cannon states are pure functions of the phase: memoise them for the whole search.
@@ -77,7 +78,6 @@ func solve(level: Dictionary, max_seconds: float) -> Dictionary:
 		var sim = item["sim"]
 		if not best.is_empty() and sim.tick >= best["ticks"] + maxi(0, sim.run_start_tick):
 			continue
-		var c: Dictionary = level["cannons"][sim.cannon_index]
 		var info = sim.cannon_type(sim.cannon_index)
 		var max_wait := mini(level_cycle, 600)
 		if info.has("auto_fire_ticks"):

@@ -190,7 +190,6 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 	info.add_child(UI.label(str(level.get("name", "Untitled")), 26))
 	var id := str(level.get("id", ""))
 	var rev := GameState.level_hash(level)
-	var best := GameState.best_ticks(id, rev)
 	var author := GameState.display_name(str(level.get("author", "?")), str(level.get("author_id", "")))
 	var meta_row := HBoxContainer.new()
 	meta_row.add_theme_constant_override("separation", 0)

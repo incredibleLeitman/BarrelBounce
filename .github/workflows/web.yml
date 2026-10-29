@@ -56,12 +56,15 @@ jobs:
           $GODOT --headless --export-release Web export/web/index.html
           ls -la export/web
 
+      - name: Lint (no GDScript warnings allowed)
+        run: tools/lint.sh ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
+
       - name: Smoke test and solver
         run: |
           set -e
           GODOT=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
           $GODOT --headless res://tools/smoke_test.tscn
-          $GODOT --headless -s tools/solve_levels.gd -- 60
+          $GODOT --headless -s tools/solve_levels.gd -- 120
           $GODOT --headless -s tools/verify_runs.gd -- tools/fixtures/pending.json /tmp/results.json
           grep -q '"verified"' /tmp/results.json
           # The server sends an empty level_data map as []; the verifier must cope with it.

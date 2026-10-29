@@ -37,6 +37,7 @@ scripts/
   view/                rendering only: LevelView, CannonNode, PlayerNode, FinishNode, Backdrop
 levels/builtin_levels.gd   the shipped levels (same dictionary format as saved JSON)
 tools/solve_levels.gd      headless brute-force solver, proves every built-in level is beatable
+tools/lint.sh / lint.gd    static check: fails on any GDScript warning (also run in CI)
 ```
 
 ### Determinism
@@ -183,6 +184,7 @@ Open the folder in Godot 4.3 and press Play. Headless checks:
 
 ```
 godot --headless --import                            # build the script class cache (once)
+tools/lint.sh godot                                  # fail on any GDScript warning, as CI does
 godot --headless -s tools/solve_levels.gd -- 60      # solve every built-in level (60 s budget each)
 godot --headless -s tools/solve_levels.gd -- 60 3    # only level index 3
 godot --headless -s tools/check_hops.gd -- 9         # per hop: closest approach to the next cannon

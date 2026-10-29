@@ -388,12 +388,12 @@ func _build_cannon_inspector() -> void:
 			if bool(blk.get("seq", false)):
 				has_step = true
 	if has_step:
-		var pingpong := str(cannons[0].get("seq_mode", "loop")) == "pingpong"
-		var mode_btn := UI.small_button(tr("Sequence: back & forth") if pingpong else tr("Sequence: loop"))
+		var back_and_forth := str(cannons[0].get("seq_mode", "loop")) == "pingpong"
+		var mode_btn := UI.small_button(tr("Sequence: back & forth") if back_and_forth else tr("Sequence: loop"))
 		mode_btn.tooltip_text = tr("How the sequence repeats: play it forwards and then backwards, or restart from step 1")
 		mode_btn.pressed.connect(func():
 			for c in cannons:
-				c["seq_mode"] = "loop" if pingpong else "pingpong"
+				c["seq_mode"] = "loop" if back_and_forth else "pingpong"
 			_structure_changed())
 		inspector_box.add_child(mode_btn)
 

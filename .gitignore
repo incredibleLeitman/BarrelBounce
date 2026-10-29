@@ -13,3 +13,4 @@ export_presets.cfg.secret
 Thumbs.db
 .vscode/
 .idea/
+override.cfg
