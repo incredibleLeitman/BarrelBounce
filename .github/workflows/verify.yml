@@ -60,6 +60,16 @@ jobs:
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           echo "$COUNT pending row(s)"
 
+      - name: Check the public API
+        if: steps.cfg.outputs.configured == 'true'
+        env:
+          API_URL: ${{ secrets.API_URL }}
+        run: |
+          set -e
+          # The same call the Community tab makes; prints how many levels are listed.
+          curl -sS -L -G "$API_URL" --data-urlencode "action=levels" --data-urlencode "player_id=ci" -o levels.json
+          python3 -c "import json;d=json.load(open('levels.json'));assert d.get('ok'),d;print(len(d['rows']),'community level(s) listed');[print(' -',r['name'],r['status'],'stars',r['stars']) for r in d['rows']]"
+
       - name: Cache Godot
         if: steps.cfg.outputs.configured == 'true' && steps.fetch.outputs.count != '0'
         id: cache
