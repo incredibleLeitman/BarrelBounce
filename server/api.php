@@ -15,6 +15,7 @@
 //   POST unpublish     {level_id, player_id}            removes a level (also cancels a pending one)
 //   POST star          {level_id, player_id, on}        marks / unmarks a favourite
 //   GET  pending       key                              rows the verifier must replay
+//   GET  all_runs      key                              every run with status (admin overview)
 //   POST resolve       {key, runs:[{id,status,reason}], levels:[{id,status,reason}]}
 //
 // Runs and levels are stored as "pending" and only shown once the verifier
@@ -71,6 +72,7 @@ switch ($action) {
     case 'unpublish':     unpublish($pdo, $body); break;
     case 'star':          star($pdo, $body); break;
     case 'pending':       pending($pdo, $config); break;
+    case 'all_runs':      all_runs($pdo, $config); break;
     case 'resolve':       resolve($pdo, $config, $body); break;
     default:              fail('Unknown action.', 404);
 }
@@ -268,6 +270,27 @@ function publish_level(PDO $pdo, array $config, array $b): void {
         $st = $pdo->prepare("INSERT INTO levels (id, rev, name, author_id, author_name, author_color, data, proof_ticks) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         $st->execute([$id, $rev, $name, $author_id, $author_name, $author_color, $json, $proof_ticks]);
     }
+    // The proof run is a real run: put it on the leaderboard too (pending, like any run), so
+    // the creator's time counts from the start. Proofs from before player ids existed belong
+    // to the author.
+    $taps = [];
+    foreach ($v['taps'] as $t) { if (is_numeric($t)) $taps[] = (int)$t; }
+    $run_player = str_param($v['player_id'] ?? '', 48);
+    if ($run_player === '') $run_player = $author_id;
+    $run_name = str_param($v['player'] ?? '', 64);
+    if ($run_name === '') $run_name = $author_name;
+    if ($proof_ticks > 0 && count($taps) > 0 && count($taps) <= $config['max_taps']) {
+        $st = $pdo->prepare("SELECT id, ticks, status FROM runs WHERE level_id = ? AND rev = ? AND player_id = ?");
+        $st->execute([$id, $rev, $run_player]);
+        $existing_run = $st->fetch();
+        if (!$existing_run) {
+            $st = $pdo->prepare("INSERT INTO runs (level_id, rev, player_id, player_name, player_color, ticks, taps) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $st->execute([$id, $rev, $run_player, $run_name, $author_color, $proof_ticks, json_encode($taps)]);
+        } elseif ((int)$existing_run['ticks'] > $proof_ticks || $existing_run['status'] === 'rejected') {
+            $st = $pdo->prepare("UPDATE runs SET player_name = ?, ticks = ?, taps = ?, status = 'pending', reason = '', created_at = NOW() WHERE id = ?");
+            $st->execute([$run_name, $proof_ticks, json_encode($taps), $existing_run['id']]);
+        }
+    }
     ok(['stored' => true, 'status' => 'pending']);
 }
 
@@ -324,6 +347,17 @@ function star(PDO $pdo, array $b): void {
     $st = $pdo->prepare("SELECT COUNT(*) FROM stars WHERE level_id = ?");
     $st->execute([$id]);
     ok(['starred' => $on, 'stars' => (int)$st->fetchColumn()]);
+}
+
+// Admin: every run with its status, newest first (the workflow prints it; handy to see the
+// state of the board without phpMyAdmin).
+function all_runs(PDO $pdo, array $config): void {
+    require_admin($config, $_GET['key'] ?? '');
+    $st = $pdo->query("SELECT r.id, r.level_id, COALESCE(l.name, r.level_id) AS level_name, r.rev, r.player_name, r.ticks, r.status, r.reason, r.created_at
+                       FROM runs r LEFT JOIN levels l ON l.id = r.level_id ORDER BY r.created_at DESC LIMIT 200");
+    $rows = [];
+    foreach ($st as $r) { $r['id'] = (int)$r['id']; $r['ticks'] = (int)$r['ticks']; $rows[] = $r; }
+    ok(['rows' => $rows]);
 }
 
 function pending(PDO $pdo, array $config): void {

@@ -62,6 +62,7 @@ All actions: `api.php?action=NAME`. POST bodies are JSON. Responses are JSON wit
 | `unpublish` | POST | `level_id`, `player_id` → removes the level, its runs and stars |
 | `star` | POST | `level_id`, `player_id`, `on` → `stars` count |
 | `pending` | GET | `key` → pending runs and levels for the verifier |
+| `all_runs` | GET | `key` → every run with status and reason, newest first (the verify workflow prints it) |
 | `resolve` | POST | `key`, `runs[]`, `levels[]` with `status` verified / rejected and a `reason` code |
 
 Everything is CORS-enabled so the web build on GitHub Pages can call it.

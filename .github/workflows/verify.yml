@@ -75,7 +75,24 @@ jobs:
             python3 -c "import json;d=json.load(open('board.json'));assert d.get('ok'),d;print('   leaderboard of',repr('${pair%%:*}'),':',d['total'],'verified run(s)');[print('    ',r['rank'],r['player_name'],'%.2f s'%(r['ticks']/60)) for r in d['rows']]"
           done
 
-      - name: Cache Godot
+      - name: List every run (admin)
+        if: steps.cfg.outputs.configured == 'true'
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+        run: |
+          set -e
+          curl -sS -L -G "$API_URL" --data-urlencode "action=all_runs" --data-urlencode "key=$ADMIN_KEY" -o runs.json
+          python3 -c "
+          import json
+          d = json.load(open('runs.json'))
+          if not d.get('ok'):
+              print('all_runs not available:', d.get('error'))
+          else:
+              print(len(d['rows']), 'run(s) on the server, newest first')
+              for r in d['rows']:
+                  print('  %-24s %-16s %6.2f s  %-9s %s  %s' % (r['level_name'][:24], r['player_name'][:16], r['ticks'] / 60, r['status'], r['reason'], r['created_at']))
+          "
         if: steps.cfg.outputs.configured == 'true' && steps.fetch.outputs.count != '0'
         id: cache
         uses: actions/cache@v4
