@@ -46,7 +46,15 @@ jobs:
           ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
         run: |
           set -e
-          curl -sS --fail -G "$API_URL" --data-urlencode "action=pending" --data-urlencode "key=$ADMIN_KEY" -o pending.json
+          # Follow redirects and show where the request ended up, so a moved API is obvious in the log.
+          STATUS=$(curl -sS -L -G "$API_URL" --data-urlencode "action=pending" --data-urlencode "key=$ADMIN_KEY" \
+                   -o pending.json -w "%{http_code} %{url_effective}")
+          echo "API answered: HTTP ${STATUS%% *} at ${STATUS#* }" | sed "s#key=[^& ]*#key=***#"
+          if ! python3 -c "import json;d=json.load(open('pending.json'));assert d.get('ok')" 2>/dev/null; then
+            echo "::error::The API did not return ok JSON. First bytes of the answer:"
+            head -c 300 pending.json; echo
+            exit 1
+          fi
           COUNT=$(python3 -c "import json;d=json.load(open('pending.json'));print(len(d.get('runs',[]))+len(d.get('levels',[])))")
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           echo "$COUNT pending row(s)"
