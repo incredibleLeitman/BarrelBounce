@@ -102,5 +102,10 @@ jobs:
           json.dump(r, open('resolve.json', 'w'))
           EOF
           SEP='?'; case "$API_URL" in *\?*) SEP='&';; esac
-          curl -sS --fail -X POST "${API_URL}${SEP}action=resolve" -H "Content-Type: application/json" --data-binary @resolve.json
-          echo
+          # Follow redirects while keeping the POST (a secret with http:// or www. would
+          # otherwise silently lose the verdicts), and insist on an ok answer.
+          curl -sS --fail -L --post301 --post302 --post303 -X POST "${API_URL}${SEP}action=resolve" \
+               -H "Content-Type: application/json" --data-binary @resolve.json -o resolve_answer.json \
+               -w "HTTP %{http_code} at %{url_effective}\n" | sed "s#key=[^& ]*#key=***#"
+          cat resolve_answer.json; echo
+          python3 -c "import json;d=json.load(open('resolve_answer.json'));assert d.get('ok'),d"
