@@ -16,6 +16,7 @@ const SHOTS := [
 
 
 func _ready() -> void:
+	Online.disabled_for_tests = true
 	DirAccess.make_dir_recursive_absolute("user://screenshots")
 	await get_tree().process_frame
 	GameState.current_level = GameState.builtin_levels()[1]

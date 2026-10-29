@@ -43,6 +43,7 @@ func _ready() -> void:
 	add_child(view)
 	view.bind(sim)
 	_load_ghost()
+	_fetch_world_ghost()
 	camera = CameraRig.new()
 	add_child(camera)
 	_fit_camera()
@@ -347,6 +348,34 @@ func _on_finish() -> void:
 	win_panel.pivot_offset = win_panel.size / 2.0
 	var tw := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(win_panel, "scale", Vector2.ONE, 0.35)
+
+
+## Adds the world record as a third ghost: the fastest verified run of another player.
+func _fetch_world_ghost() -> void:
+	if not Online.enabled() or not GameState.ghost_enabled():
+		return
+	var id := str(level.get("id", ""))
+	if not (id.begins_with("builtin_") or str(level.get("online_id", "")) != ""):
+		return
+	Online.leaderboard(id, rev, func(ok: bool, data: Dictionary):
+		if not ok or not is_inside_tree() or ghost_armed:
+			return
+		for r in data.get("rows", []):
+			if str(r.get("player_id", "")) == GameState.player_id():
+				continue
+			var creator := GameState.creator_proof(level)
+			if not creator.is_empty() and int(r.get("ticks", -1)) == int(creator.get("ticks", -2)) \
+					and str(r.get("player_id", "")) == str(creator.get("player_id", "")):
+				return   # the creator's ghost already shows this run
+			var entry := {"ticks": r.get("ticks", -1), "taps": r.get("taps", [])}
+			var col := Color(str(r.get("player_color", "#ffffff")))
+			_add_ghost(entry, str(r.get("player_name", "?")), col, 0.6)
+			var binds: Array = []
+			for g in ghosts:
+				binds.append({"sim": g["sim"], "color": g["color"], "strength": g["strength"], "label": g["label"]})
+			view.bind_ghosts(binds)
+			_update_best()
+			return)
 
 
 ## Posts a new best to the leaderboard and shows the world ranking in the win panel.

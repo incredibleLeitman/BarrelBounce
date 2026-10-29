@@ -8,6 +8,7 @@ var failures := 0
 
 
 func _ready() -> void:
+	Online.disabled_for_tests = true
 	await get_tree().process_frame
 	await _test_play_with_taps()
 	await _test_editor_roundtrip()
@@ -422,7 +423,7 @@ func _test_online_offline() -> void:
 	var level: Dictionary = GameState.builtin_levels()[1]
 	check(LevelCheck.level_hash(level) == GameState.level_hash(level), "LevelCheck hash equals GameState hash")
 	check(LevelCheck.verify_run(level, [1, 28]) == 65, "LevelCheck replays the known Catch Me solution")
-	check(not Online.enabled(), "online is off when API_URL is empty")
+	check(not Online.enabled(), "online is off for tests")
 	var got := {}
 	Online.submit_run(level, "x", 1, [1], func(ok: bool, data: Dictionary):
 		got["ok"] = ok

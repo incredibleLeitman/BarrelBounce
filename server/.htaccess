@@ -1,0 +1,10 @@
+# Never serve the credentials file, even if PHP were misconfigured.
+<Files "config.php">
+    Require all denied
+</Files>
+<Files "config.example.php">
+    Require all denied
+</Files>
+<Files "schema.sql">
+    Require all denied
+</Files>

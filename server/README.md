@@ -13,7 +13,8 @@ trusts a client's time.
    `/barrelbounce/api.php`, so it is reachable as `https://YOURDOMAIN/barrelbounce/api.php`.
    Copy `config.example.php` to `config.php` in the same folder and fill in the database
    values and a long random `admin_key` (for example from `openssl rand -hex 32`).
-   Make sure PHP 8 is selected for the domain in KAS (*PHP-Version*).
+   Make sure PHP 8 is selected for the domain in KAS (*PHP-Version*). Upload `.htaccess`
+   too: it stops the web server from ever handing out `config.php` or `schema.sql`.
 3. **Check.** Open `https://YOURDOMAIN/barrelbounce/api.php?action=levels` in a browser.
    You should see `{"ok":true,"rows":[],...}`.
 4. **Game.** In `scripts/online.gd` set `API_URL` to that address and push. The web build
