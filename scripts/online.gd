@@ -6,7 +6,7 @@ extends Node
 ## callback `cb.call(ok: bool, data: Dictionary)`; a failed request calls back with ok = false.
 
 ## Example: "https://example.com/barrelbounce/api.php"
-const API_URL := "https://games.ctrlaltpaw.com/BarrelBounce/api/api.php"
+const API_URL := "https://ctrlaltpaw.com/games/BarrelBounce/api/api.php"
 const TIMEOUT := 12.0
 ## Tests set this so a headless run never talks to the real server.
 var disabled_for_tests := false
