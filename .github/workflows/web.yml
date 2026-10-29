@@ -64,6 +64,9 @@ jobs:
           $GODOT --headless -s tools/solve_levels.gd -- 60
           $GODOT --headless -s tools/verify_runs.gd -- tools/fixtures/pending.json /tmp/results.json
           grep -q '"verified"' /tmp/results.json
+          # The server sends an empty level_data map as []; the verifier must cope with it.
+          timeout 120 $GODOT --headless -s tools/verify_runs.gd -- tools/fixtures/pending_php_shape.json /tmp/results2.json
+          grep -q '"rejected"' /tmp/results2.json
 
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -46,16 +46,24 @@ func _init() -> void:
 	var levels_by_id := {}
 	for l in LevelsScript.LEVELS:
 		levels_by_id[str(l["id"])] = l.duplicate(true)
-	var extra: Dictionary = data.get("level_data", {})
-	for id in extra.keys():
-		if typeof(extra[id]) == TYPE_DICTIONARY:
-			levels_by_id[str(id)] = CheckScript.normalize(extra[id])
+	# An empty map arrives from PHP as [] rather than {}, so never assume the type.
+	var extra = data.get("level_data", {})
+	if typeof(extra) == TYPE_DICTIONARY:
+		for id in extra.keys():
+			if typeof(extra[id]) == TYPE_DICTIONARY:
+				levels_by_id[str(id)] = CheckScript.normalize(extra[id])
+	var pending_levels = data.get("levels", [])
+	var pending_runs = data.get("runs", [])
+	if typeof(pending_levels) != TYPE_ARRAY:
+		pending_levels = []
+	if typeof(pending_runs) != TYPE_ARRAY:
+		pending_runs = []
 
 	var results := {"runs": [], "levels": []}
 	var verified := 0
 	var rejected := 0
 
-	for l in data.get("levels", []):
+	for l in pending_levels:
 		var level = l.get("data")
 		var reason := "bad_data"
 		if typeof(level) == TYPE_DICTIONARY:
@@ -80,7 +88,7 @@ func _init() -> void:
 		else: rejected += 1
 		print("level %-24s %s %s" % [str(l.get("id", "")), status, reason])
 
-	for r in data.get("runs", []):
+	for r in pending_runs:
 		var reason := "bad_data"
 		var level = levels_by_id.get(str(r.get("level_id", "")))
 		if typeof(level) != TYPE_DICTIONARY:

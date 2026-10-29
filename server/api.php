@@ -328,7 +328,8 @@ function pending(PDO $pdo, array $config): void {
         $r = $st->fetch();
         if ($r) $level_data[$lid] = json_decode($r['data'], true);
     }
-    ok(['runs' => $runs, 'levels' => $levels, 'level_data' => $level_data]);
+    // (object) keeps an empty map a JSON object instead of [].
+    ok(['runs' => $runs, 'levels' => $levels, 'level_data' => (object)$level_data]);
 }
 
 function resolve(PDO $pdo, array $config, array $b): void {
