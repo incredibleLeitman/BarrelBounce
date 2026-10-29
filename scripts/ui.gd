@@ -156,9 +156,9 @@ static func confirm(parent: Control, title_text: String, message: String, yes_te
 	box.custom_minimum_size = Vector2(420, 0)
 	box.add_theme_constant_override("separation", 12)
 	panel.add_child(box)
-	var t := title(title_text, 32)
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(t)
+	var heading := title(title_text, 32)
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(heading)
 	var m := label(message, 18, MUTED)
 	m.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	m.autowrap_mode = TextServer.AUTOWRAP_WORD
