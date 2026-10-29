@@ -90,6 +90,22 @@ func _build_ui() -> void:
 			UI.confirm(root, "Exit BarrelBounce?", "Your levels and best times are saved.", "Exit", func(): get_tree().quit()))
 		box.add_child(quit)
 
+	# Fullscreen toggle (top right). In the browser this uses the Fullscreen API, so it works
+	# from inside an iframe as long as the page allows it.
+	if not GameState.is_mobile:
+		var fs := UI.icon_button("", "fullscreen")
+		fs.tooltip_text = "Fullscreen"
+		fs.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		fs.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		fs.offset_left = -64
+		fs.offset_right = -16
+		fs.offset_top = 16
+		fs.offset_bottom = 60
+		fs.pressed.connect(func():
+			var full := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if full else DisplayServer.WINDOW_MODE_FULLSCREEN))
+		root.add_child(fs)
+
 	# First start: open the rules once.
 	if not GameState.help_seen():
 		GameState.mark_help_seen()
