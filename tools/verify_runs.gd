@@ -8,11 +8,19 @@ extends SceneTree
 ## A run is verified when its taps finish the level in exactly the claimed ticks on the
 ## claimed revision. A level is verified when its proof run does the same.
 
-const LevelsScript := preload("res://levels/builtin_levels.gd")
-const CheckScript := preload("res://scripts/level_check.gd")
+## Loaded at run time (not preloaded) so that a project that was not imported yet, where
+## class names do not resolve, makes this script exit with an error instead of idling.
+var LevelsScript: GDScript
+var CheckScript: GDScript
 
 
 func _init() -> void:
+	LevelsScript = load("res://levels/builtin_levels.gd")
+	CheckScript = load("res://scripts/level_check.gd")
+	if LevelsScript == null or CheckScript == null or not CheckScript.can_instantiate():
+		printerr("game scripts failed to load; run `godot --headless --import` first")
+		quit(3)
+		return
 	var args := OS.get_cmdline_user_args()
 	if args.size() < 2:
 		printerr("usage: -- pending.json results.json")
@@ -48,9 +56,9 @@ func _init() -> void:
 			level = CheckScript.normalize(level)
 			var v = level.get("verified")
 			if typeof(v) == TYPE_DICTIONARY and typeof(v.get("taps")) == TYPE_ARRAY:
-				var rev := CheckScript.level_hash(level)
+				var rev: String = CheckScript.level_hash(level)
 				if str(v.get("rev", "")) == rev and str(l.get("rev", "")) == rev:
-					var ticks := CheckScript.verify_run(level, v["taps"])
+					var ticks: int = CheckScript.verify_run(level, v["taps"])
 					if ticks > 0 and ticks == int(v.get("ticks", -2)):
 						status = "verified"
 						levels_by_id[str(l["id"])] = level
@@ -64,7 +72,7 @@ func _init() -> void:
 		var level = levels_by_id.get(str(r.get("level_id", "")))
 		if typeof(level) == TYPE_DICTIONARY and typeof(r.get("taps")) == TYPE_ARRAY:
 			if CheckScript.level_hash(level) == str(r.get("rev", "")):
-				var ticks := CheckScript.verify_run(level, r["taps"])
+				var ticks: int = CheckScript.verify_run(level, r["taps"])
 				if ticks > 0 and ticks == int(r.get("ticks", -2)):
 					status = "verified"
 		results["runs"].append({"id": int(r.get("id", 0)), "status": status})

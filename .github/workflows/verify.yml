@@ -22,6 +22,7 @@ env:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -80,8 +81,12 @@ jobs:
         run: |
           set -e
           GODOT=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
-          $GODOT --headless --import > /dev/null 2>&1 || true
-          $GODOT --headless -s tools/verify_runs.gd -- pending.json results.json
+          # The import builds the class cache the scripts need; without it they fail to parse
+          # and headless Godot would sit idle forever, so check it and bound both commands.
+          timeout 300 $GODOT --headless --import || echo "import exited with $?"
+          test -f .godot/global_script_class_cache.cfg || { echo "::error::Project import failed."; exit 1; }
+          timeout 600 $GODOT --headless -s tools/verify_runs.gd -- pending.json results.json
+          test -f results.json
 
       - name: Report verdicts
         if: steps.cfg.outputs.configured == 'true' && steps.fetch.outputs.count != '0'
