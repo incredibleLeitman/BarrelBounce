@@ -28,7 +28,8 @@ trusts a client's time.
 
 - Finishing a level with a new personal best posts the run (`submit_run`). It is stored as
   *pending* and appears on the leaderboard once verified. The win panel shows the top of the
-  leaderboard and your rank.
+  leaderboard and your rank. On equal times the newer run ranks higher, so a record can be
+  taken back. Publishing a level also puts its proof run on the leaderboard as the author's.
 - *Publish* on one of your levels in the level select uploads it (`publish_level`) with your
   proof run. It is *pending* until the verifier replayed the proof, then listed under
   *Community* for everyone; a rejected level shows the verifier's reason to its author.

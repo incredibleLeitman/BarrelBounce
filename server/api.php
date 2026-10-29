@@ -87,16 +87,13 @@ function leaderboard(PDO $pdo, array $config): void {
     $limit = (int)$config['leaderboard_limit'];
     $st = $pdo->prepare("SELECT player_id, player_name, player_color, ticks, taps, created_at
                          FROM runs WHERE level_id = ? AND rev = ? AND status = 'verified'
-                         ORDER BY ticks ASC, created_at ASC LIMIT $limit");
+                         ORDER BY ticks ASC, created_at DESC LIMIT $limit");
     $st->execute([$level_id, $rev]);
     $rows = [];
     $rank = 0;
-    $n = 0;
-    $prev = -1;
     foreach ($st as $r) {
-        // Equal times share a rank (1, 1, 3): the earlier submission is only listed first.
-        $n++;
-        if ((int)$r['ticks'] !== $prev) { $rank = $n; $prev = (int)$r['ticks']; }
+        // On equal times the newer run ranks higher, so a record can be re-taken.
+        $rank++;
         $rows[] = [
             'rank' => $rank,
             'player_id' => $r['player_id'],
@@ -108,12 +105,13 @@ function leaderboard(PDO $pdo, array $config): void {
     }
     $mine = null;
     if ($player_id !== '') {
-        $st = $pdo->prepare("SELECT ticks, status, reason FROM runs WHERE level_id = ? AND rev = ? AND player_id = ?");
+        $st = $pdo->prepare("SELECT ticks, status, reason, created_at FROM runs WHERE level_id = ? AND rev = ? AND player_id = ?");
         $st->execute([$level_id, $rev, $player_id]);
         $m = $st->fetch();
         if ($m) {
-            $st = $pdo->prepare("SELECT COUNT(*) FROM runs WHERE level_id = ? AND rev = ? AND status = 'verified' AND ticks < ?");
-            $st->execute([$level_id, $rev, (int)$m['ticks']]);
+            $st = $pdo->prepare("SELECT COUNT(*) FROM runs WHERE level_id = ? AND rev = ? AND status = 'verified'
+                                 AND (ticks < ? OR (ticks = ? AND created_at > ?))");
+            $st->execute([$level_id, $rev, (int)$m['ticks'], (int)$m['ticks'], $m['created_at']]);
             $mine = ['ticks' => (int)$m['ticks'], 'status' => $m['status'], 'reason' => $m['reason'], 'rank' => (int)$st->fetchColumn() + 1];
         }
     }
@@ -129,7 +127,7 @@ function records(PDO $pdo): void {
     $st = $pdo->prepare("SELECT ticks, player_id, player_name, player_color,
                                 (SELECT COUNT(*) FROM runs r2 WHERE r2.level_id = runs.level_id AND r2.rev = runs.rev AND r2.status = 'verified') AS total
                          FROM runs WHERE level_id = ? AND rev = ? AND status = 'verified'
-                         ORDER BY ticks ASC, created_at ASC LIMIT 1");
+                         ORDER BY ticks ASC, created_at DESC LIMIT 1");
     foreach (array_slice(array_filter(explode(',', $ids)), 0, 60) as $pair) {
         $parts = explode(':', $pair, 2);
         if (count($parts) !== 2) continue;

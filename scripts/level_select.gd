@@ -197,7 +197,9 @@ func _add_row(level: Dictionary, editable: bool) -> void:
 	info.add_child(meta_row)
 	meta_row.add_child(UI.label(tr("by %s  ·  %d cannons  ·  ") % [author, level.get("cannons", []).size()], 16, UI.MUTED))
 	var creator := GameState.creator_proof(level)
-	var creator_is_me := not creator.is_empty() and str(creator.get("player_id", "")) == GameState.player_id()
+	# Proofs from before player ids existed carry none: they belong to the level's author.
+	var creator_is_me := not creator.is_empty() and (str(creator.get("player_id", "")) == GameState.player_id() \
+		or (not creator.has("player_id") and str(level.get("author_id", "")) == GameState.player_id()))
 	_add_times(meta_row, id, rev, int(creator.get("ticks", -1)), str(creator.get("player", "creator")), creator_is_me)
 
 	if editable and Online.enabled():
@@ -272,9 +274,12 @@ func _add_publish_controls(level: Dictionary, id: String, rev: String, info: VBo
 				line.add_child(UI.label(tr("rejected: %s") % Online.reason_text(str(st.get("reason", ""))), 15, UI.BAD))
 			_:
 				line.add_child(UI.label("waiting for verification (up to 30 minutes)", 15, UI.ACCENT_2))
-		# The server holds an older revision: offer to send the new one.
-		if status != "pending" and str(st.get("rev", "")) != rev:
+		# Send the current version again: a newer revision, or the same one once more (which
+		# re-verifies it and puts the proof run on the leaderboard).
+		if status != "pending":
 			var update := UI.small_button("  Update  ")
+			if str(st.get("rev", "")) == rev:
+				update.tooltip_text = tr("Send this version again.")
 			if GameState.can_share(level) and not my_info["pending"]:
 				update.pressed.connect(func(): _publish(level))
 			else:
