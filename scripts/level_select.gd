@@ -154,16 +154,33 @@ func _render() -> void:
 				var hint := UI.label(tr("Published %d of %d levels  ·  one submission at a time, verification takes up to 30 minutes") % [my_info["count"], my_info["max"]], 15, UI.MUTED, true)
 				hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 				list.add_child(hint)
+			var published: Array = []
 			for l in levels:
 				_add_row(l, true)
+				if l.has("online_id"):
+					published.append({"id": l["id"], "rev": GameState.level_hash(l)})
+			_fetch_records(published)
 		Tab.BUILTIN:
+			var pairs: Array = []
 			for l in GameState.builtin_levels():
 				_add_row(l, false)
+				pairs.append({"id": l["id"], "rev": GameState.level_hash(l)})
+			_fetch_records(pairs)
+			var locked := GameState.builtin_locked_count()
+			if locked > 0:
+				var note := UI.label(tr("%d more levels with six more cannon types and walls are in the full game.") % locked, 18, UI.ACCENT_2, true)
+				note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				list.add_child(UI.spacer(10))
+				list.add_child(note)
 		Tab.COMMUNITY:
 			if not Online.enabled():
 				_empty_message("Online play is not set up in this build.\nShare levels as codes in the meantime!")
-			else:
+			elif community_rows.is_empty():
 				_load_community()
+			else:
+				for r in community_rows:
+					_add_community_row(r)
 
 
 func _empty_message(text: String) -> void:
@@ -412,6 +429,9 @@ func _show_import() -> void:
 	row.add_child(paste)
 	do_import.pressed.connect(func():
 		var level := GameState.level_from_code(box.text)
+		if level.get("locked", false):
+			status.text = tr("This level uses cannons or walls from the full game.")
+			return
 		if level.is_empty():
 			status.text = tr("That is not a valid level code, or its proof run does not finish the level.")
 			return

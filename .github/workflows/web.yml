@@ -52,9 +52,11 @@ jobs:
           set -e
           GODOT=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
           $GODOT --headless --import
-          mkdir -p export/web
-          $GODOT --headless --export-release Web export/web/index.html
-          ls -la export/web
+          # The demo (no feature tags) is the site root, the full online game lives under /full/.
+          mkdir -p site/full
+          $GODOT --headless --export-release Web site/index.html
+          $GODOT --headless --export-release "Web Full" site/full/index.html
+          ls -la site site/full
 
       - name: Lint (no GDScript warnings allowed)
         run: tools/lint.sh ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
@@ -73,7 +75,7 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: export/web
+          path: site
 
   deploy:
     needs: build

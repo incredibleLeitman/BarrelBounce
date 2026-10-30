@@ -18,6 +18,7 @@ func _ready() -> void:
 	_test_sequences()
 	await _test_ghost_and_fairness()
 	_test_online_offline()
+	_test_demo_edition()
 	print("SMOKE TEST " + ("PASSED" if failures == 0 else "FAILED (%d)" % failures))
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -429,3 +430,26 @@ func _test_online_offline() -> void:
 		got["ok"] = ok
 		got["err"] = data.get("error", ""))
 	check(got.get("ok") == false and got.get("err") == "offline", "offline client calls back immediately with an error")
+
+
+func _test_demo_edition() -> void:
+	print("demo edition: only plain cannons, locked levels and codes")
+	var all_count := BuiltinLevels.LEVELS.size()
+	var blink_code := GameState.level_to_code(GameState.builtin_levels()[4])
+	GameState.force_demo = true
+	check(GameState.allowed_types() == ["normal"], "the demo allows the plain cannon only")
+	var demo_levels := GameState.builtin_levels()
+	var plain := 0
+	for l in BuiltinLevels.LEVELS:
+		var ok := true
+		for c in l["cannons"]:
+			if str(c.get("type", "normal")) != "normal":
+				ok = false
+		if ok:
+			plain += 1
+	check(demo_levels.size() == plain and plain > 0, "the demo lists the %d plain-cannon levels" % plain)
+	check(GameState.builtin_locked_count() == all_count - plain, "the rest counts as locked")
+	check(not Online.enabled(), "the demo is offline")
+	check(GameState.level_from_code(blink_code).get("locked", false) == true, "a code with full-game cannons is reported as locked")
+	GameState.force_demo = false
+	check(GameState.builtin_levels().size() == all_count, "the full edition lists every level")

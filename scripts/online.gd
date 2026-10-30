@@ -12,8 +12,11 @@ const TIMEOUT := 12.0
 var disabled_for_tests := false
 
 
+## Leaderboards and community levels: the full online edition only (feature tag "online",
+## see GameState.full_version), never in tests.
 func enabled() -> bool:
-	return API_URL != "" and not disabled_for_tests
+	return API_URL != "" and not disabled_for_tests and not GameState.force_demo \
+		and (OS.has_feature("online") or OS.has_feature("editor"))
 
 
 # ---------------------------------------------------------------- calls

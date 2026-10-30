@@ -213,14 +213,34 @@ install and start it on the connected phone directly. `export/` is git-ignored.
 To publish later, change `package/unique_name` in the preset to your own reverse-domain
 id, switch to a release keystore and bump `version/code`.
 
+## Demo and full game (feature tags)
+
+The free demo and the full game are the same project. Two custom feature tags on the export
+presets (*Project → Export… → preset → Features*) decide what a build offers:
+
+| tag | unlocks |
+|---|---|
+| `full` | all cannon types, walls, every built-in level, codes that use them |
+| `online` | leaderboards, world-record ghosts, publishing and the Community tab |
+
+Without them a build is the **demo**: plain cannons only, the plain-cannon built-in levels,
+the editor, codes, and a note about the full game where things are missing. The editor and the
+headless tools always behave as the full online game. The presets: **Web** (demo), **Web Full**,
+**Android**, **Linux Full** and **Windows Full** (the last three for stores and Steam).
+`GameState.full_version()` / `Online.enabled()` are the two switches in code; the smoke test
+checks the demo with `GameState.force_demo`.
+
 ## Playing in the browser (WebAssembly)
 
 `export_presets.cfg` also has a **Web** preset (thread support off, so it runs on plain static
 hosting without cross-origin-isolation headers). The workflow in `.github/workflows/web.yml`
-exports it with Godot 4.7.2 on every push to `main` (and `claude/**` branches), runs the smoke
-test and the level solver, and deploys the result to **GitHub Pages**:
+exports it with Godot 4.7.2 on every push to `main` (and `claude/**` branches), runs the lint,
+the smoke test and the level solver, and deploys the result to **GitHub Pages**: the demo at
+the root and the full online game under `/full/` (for your own testing and the embed on your
+website):
 
     https://incredibleleitman.github.io/BarrelBounce/
+    https://incredibleleitman.github.io/BarrelBounce/full/
 
 One-time: in the repository go to *Settings → Pages* and set *Source* to **GitHub Actions**
 (the workflow tries to enable this itself; if it fails the first time, flip the setting and

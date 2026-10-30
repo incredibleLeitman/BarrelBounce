@@ -279,14 +279,14 @@ func _build_cannon_inspector() -> void:
 	type_opt.custom_minimum_size.y = 40
 	type_opt.disabled = has_start and not multi
 	var common_type = _common(cannons, "type", "normal")
-	for i in Simulation.TYPE_ORDER.size():
-		var key: String = Simulation.TYPE_ORDER[i]
-		type_opt.add_item(tr(Simulation.TYPES[key]["label"]), i)
-	if common_type == null:
+	# Item ids are TYPE_ORDER indices; the demo only lists the plain cannon.
+	for key in GameState.allowed_types():
+		type_opt.add_item(tr(Simulation.TYPES[key]["label"]), Simulation.TYPE_ORDER.find(key))
+	if common_type == null or type_opt.get_item_index(Simulation.TYPE_ORDER.find(str(common_type))) < 0:
 		type_opt.add_item("", 99)
 		type_opt.select(type_opt.item_count - 1)
 	else:
-		type_opt.select(Simulation.TYPE_ORDER.find(str(common_type)))
+		type_opt.select(type_opt.get_item_index(Simulation.TYPE_ORDER.find(str(common_type))))
 	var hint_text := ""
 	if common_type != null:
 		hint_text = tr(Simulation.type_info(str(common_type))["hint"])
@@ -296,16 +296,19 @@ func _build_cannon_inspector() -> void:
 			hint_text += tr(" It keeps its type when you change the others.")
 	var type_hint := UI.label(hint_text, 14, UI.MUTED, true)
 	type_opt.item_selected.connect(func(i):
-		if i >= Simulation.TYPE_ORDER.size():
+		var id := type_opt.get_item_id(i)
+		if id < 0 or id >= Simulation.TYPE_ORDER.size():
 			return
 		for c in cannons:
-			c["type"] = Simulation.TYPE_ORDER[i]
+			c["type"] = Simulation.TYPE_ORDER[id]
 		Simulation.enforce_start_type(level)
-		type_hint.text = tr(Simulation.TYPES[Simulation.TYPE_ORDER[i]]["hint"])
+		type_hint.text = tr(Simulation.TYPES[Simulation.TYPE_ORDER[id]]["hint"])
 		_mark_dirty()
 		view.redraw_all())
 	type_row.add_child(type_opt)
 	inspector_box.add_child(type_hint)
+	if not GameState.full_version():
+		inspector_box.add_child(UI.label("Six more cannon types and walls are in the full game.", 14, UI.ACCENT_2, true))
 
 	# Angle
 	var ang_row := HBoxContainer.new()

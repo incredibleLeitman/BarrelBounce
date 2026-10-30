@@ -41,13 +41,51 @@ func play_level(level: Dictionary, back_to: String = SCENE_SELECT) -> void:
 	go(SCENE_LEVEL)
 
 
+# ---------------------------------------------------------------- editions
+
+## The free demo and the full game are the same project exported with different custom
+## feature tags (Project > Export > preset > Features): "full" unlocks every cannon type and
+## walls, "online" the leaderboards and community levels. The editor and the headless tools
+## always count as the full online game.
+func full_version() -> bool:
+	if force_demo:
+		return false
+	return OS.has_feature("full") or OS.has_feature("editor")
+
+
+## Tests and screenshots set this to see the demo edition from the editor binary.
+var force_demo := false
+
+
+## Cannon types the player may use in this edition.
+func allowed_types() -> Array:
+	return Simulation.TYPE_ORDER.duplicate() if full_version() else [Simulation.START_TYPE]
+
+
+## True when the level only uses what this edition offers.
+func level_is_available(level: Dictionary) -> bool:
+	if full_version():
+		return true
+	for c in level.get("cannons", []):
+		if str(c.get("type", "normal")) != Simulation.START_TYPE:
+			return false
+	return (level.get("walls", []) as Array).is_empty()
+
+
 # ---------------------------------------------------------------- levels
 
+## The built-in levels this edition offers, in order.
 func builtin_levels() -> Array:
 	var out: Array = []
 	for l in BuiltinLevels.LEVELS:
-		out.append(l.duplicate(true))
+		if level_is_available(l):
+			out.append(l.duplicate(true))
 	return out
+
+
+## Built-in levels the demo hides (0 in the full game).
+func builtin_locked_count() -> int:
+	return BuiltinLevels.LEVELS.size() - builtin_levels().size()
 
 
 func builtin_index(level_id: String) -> int:
@@ -357,6 +395,9 @@ func level_from_code(code: String) -> Dictionary:
 		return {}
 	data["id"] = new_level_id()
 	var level := normalize_level(data)
+	# The demo cannot play levels with the full game's cannons or walls: {"locked": true}.
+	if not level_is_available(level):
+		return {"locked": true}
 	# A shared level must carry a proof run that really finishes this revision.
 	var v = level.get("verified")
 	if typeof(v) != TYPE_DICTIONARY or typeof(v.get("taps")) != TYPE_ARRAY:

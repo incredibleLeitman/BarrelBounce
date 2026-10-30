@@ -33,13 +33,15 @@ static func show(parent: Control) -> VBoxContainer:
 
 	body.add_child(UI.spacer(10))
 	body.add_child(UI.label("Cannon types", 24))
-	for key in Simulation.TYPE_ORDER:
+	for key in GameState.allowed_types():
 		var info: Dictionary = Simulation.TYPES[key]
 		# Translate the pieces separately: the joined sentence is not a translation key.
 		var hint := TranslationServer.translate(info["hint"])
 		if key == Simulation.START_TYPE:
 			hint += TranslationServer.translate(" The start cannon is always this type.")
 		_row(body, _cannon_figure(key, []), info["label"], hint)
+	if not GameState.full_version():
+		body.add_child(UI.label("This is the demo: the full game adds Big Bertha, Pea Shooter, Blink, Hopper, Bubble and Hot Head cannons, walls, more levels, online leaderboards with ghosts and community levels.", 15, UI.ACCENT_2, true))
 
 	body.add_child(UI.spacer(10))
 	body.add_child(UI.label("Movement (combine as many as you like)", 24))

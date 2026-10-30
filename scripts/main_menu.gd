@@ -56,6 +56,8 @@ func _build_ui() -> void:
 	root.add_child(box)
 
 	var t := UI.title("BarrelBounce", 84)
+	if not GameState.full_version():
+		t.text += " " + tr("Demo")
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.add_theme_color_override("font_color", UI.ACCENT)
 	box.add_child(t)
