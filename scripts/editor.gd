@@ -13,6 +13,7 @@ const GRID := 10.0
 const PICK_RADIUS := 40.0
 const EDGE_GRAB := 12.0      # distance (level px) from a gate edge that grabs it for resizing
 const MIN_GATE := 20.0
+const MIN_WALL := 20.0
 const CLICK_SLOP := 6.0      # level px of movement that still counts as a click
 
 enum Drag { NONE, MOVE, LEFT, RIGHT, TOP, BOTTOM, BAND, HANDLE }
@@ -25,6 +26,7 @@ var dirty := false
 
 var selection: Array[int] = []   # selected cannon indices, last clicked at the end
 var finish_selected := false
+var selected_wall := -1          # index into level["walls"], -1 when no wall is selected
 var dragging := false
 var drag_mode: int = Drag.NONE
 var drag_offset := Vector2.ZERO
@@ -120,6 +122,11 @@ func _build_ui() -> void:
 	var add := UI.small_button("  + Cannon  ")
 	add.pressed.connect(_add_cannon)
 	top.add_child(add)
+	if GameState.full_version():
+		var add_wall := UI.small_button("  + Wall  ")
+		add_wall.tooltip_text = tr("A solid block the ball bounces off")
+		add_wall.pressed.connect(_add_wall)
+		top.add_child(add_wall)
 
 	var settings := UI.icon_button("", "gear")
 	settings.tooltip_text = tr("Level settings (background)")
@@ -198,11 +205,13 @@ func _rebuild_inspector() -> void:
 	_clear_inspector()
 	if finish_selected:
 		_build_finish_inspector()
+	elif selected_wall >= 0 and selected_wall < level.get("walls", []).size():
+		_build_wall_inspector()
 	elif not selection.is_empty():
 		_build_cannon_inspector()
 	else:
 		inspector_box.add_child(UI.label("Nothing selected", 20, UI.MUTED))
-		inspector_box.add_child(UI.label("Tap a cannon or the finish gate.", 16, UI.MUTED))
+		inspector_box.add_child(UI.label("Tap a cannon, a wall or the finish gate.", 16, UI.MUTED))
 
 
 func _build_finish_inspector() -> void:
@@ -223,6 +232,108 @@ func _build_finish_inspector() -> void:
 			_mark_dirty()
 			view.refresh())
 		grid.add_child(s)
+
+
+func _build_wall_inspector() -> void:
+	var w: Dictionary = level["walls"][selected_wall]
+	inspector_box.add_child(UI.title(tr("Wall %d") % (selected_wall + 1), 28))
+	inspector_box.add_child(UI.label("The ball bounces off it at full speed. Drag the edges to resize, Delete removes it.", 15, UI.MUTED, true))
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 6)
+	inspector_box.add_child(grid)
+	for spec in [["w", "Width", MIN_WALL, 3000.0], ["h", "Height", MIN_WALL, 3000.0]]:
+		grid.add_child(UI.label(spec[1], 16, UI.MUTED))
+		var sp := UI.spin(spec[2], spec[3], 10.0, float(w.get(spec[0], 40.0)), " px")
+		var key: String = spec[0]
+		sp.value_changed.connect(func(v):
+			w[key] = v
+			_mark_dirty()
+			sim.reset()
+			view.refresh())
+		grid.add_child(sp)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	inspector_box.add_child(row)
+	var dup := UI.small_button("  Duplicate  ")
+	dup.pressed.connect(func():
+		var copy: Dictionary = w.duplicate()
+		copy["x"] = float(copy["x"]) + 40.0
+		copy["y"] = float(copy["y"]) + 40.0
+		level["walls"].append(copy)
+		_select_wall(level["walls"].size() - 1)
+		_walls_changed())
+	row.add_child(dup)
+	var del := UI.icon_button(tr("Delete"), "trash")
+	del.pressed.connect(_delete_wall)
+	row.add_child(del)
+
+
+func _select_wall(i: int) -> void:
+	path_edit = -1
+	selection.clear()
+	finish_selected = false
+	selected_wall = i
+	view.set_selection(selection, false, selected_wall)
+	_rebuild_inspector()
+
+
+func _add_wall() -> void:
+	if not level.has("walls"):
+		level["walls"] = []
+	level["walls"].append({"x": snappedf(sim.size.x * 0.5 - 20.0, GRID), "y": snappedf(sim.size.y * 0.4, GRID), "w": 40.0, "h": 200.0})
+	_select_wall(level["walls"].size() - 1)
+	_walls_changed()
+
+
+func _delete_wall() -> void:
+	if selected_wall < 0 or selected_wall >= level.get("walls", []).size():
+		return
+	level["walls"].remove_at(selected_wall)
+	if level["walls"].is_empty():
+		level.erase("walls")
+	selected_wall = -1
+	view.set_selection(selection, false, -1)
+	_walls_changed()
+	_rebuild_inspector()
+
+
+## Walls changed: the simulation re-reads them, the view redraws.
+func _walls_changed() -> void:
+	_mark_dirty()
+	sim.reset()
+	sim.set_tick(0)
+	view.refresh()
+
+
+func _hit_wall(p: Vector2) -> Array:
+	# Topmost (last) wall wins; returns [index, Drag mode] or [-1, Drag.NONE].
+	var walls: Array = level.get("walls", [])
+	for i in range(walls.size() - 1, -1, -1):
+		var w: Dictionary = walls[i]
+		var r := Rect2(float(w["x"]), float(w["y"]), float(w["w"]), float(w["h"]))
+		var mode := _edge_mode(r, p)
+		if mode != Drag.NONE:
+			return [i, mode]
+	return [-1, Drag.NONE]
+
+
+## Which part of [param r] the point grabs: an edge (for resizing), the interior, or nothing.
+func _edge_mode(r: Rect2, p: Vector2) -> int:
+	if not r.grow(EDGE_GRAB).has_point(p):
+		return Drag.NONE
+	var dl := absf(p.x - r.position.x)
+	var dr := absf(p.x - r.end.x)
+	var dt := absf(p.y - r.position.y)
+	var db := absf(p.y - r.end.y)
+	var m := minf(minf(dl, dr), minf(dt, db))
+	if m <= EDGE_GRAB:
+		if m == dl: return Drag.LEFT
+		if m == dr: return Drag.RIGHT
+		if m == dt: return Drag.TOP
+		return Drag.BOTTOM
+	return Drag.MOVE
 
 
 ## Selected cannon dictionaries, in selection order.
@@ -669,6 +780,7 @@ func _structure_changed() -> void:
 
 func _set_selection(indices: Array, finish := false) -> void:
 	path_edit = -1
+	selected_wall = -1
 	selection.clear()
 	for i in indices:
 		selection.append(int(i))
@@ -773,6 +885,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					b["points"].pop_back()
 					_params_changed()
 					_rebuild_inspector()
+			elif selected_wall >= 0:
+				_delete_wall()
 			else:
 				_delete_selection()
 		elif event.keycode == KEY_A and (event.ctrl_pressed or event.meta_pressed):
@@ -784,6 +898,30 @@ func _exit_tree() -> void:
 
 
 # ---------------------------------------------------------------- picking & dragging
+
+## Moves or resizes a {"x","y","w","h"} rectangle (gate or wall) according to drag_mode,
+## snapped to the grid and kept inside the play area.
+func _drag_rect(d: Dictionary, p: Vector2, min_size: float) -> void:
+	var snapped_p := p.snapped(Vector2(GRID, GRID))
+	var a := drag_anchor
+	match drag_mode:
+		Drag.MOVE:
+			var target := (p + drag_offset).snapped(Vector2(GRID, GRID))
+			d["x"] = clampf(target.x, 0.0, sim.size.x - a.size.x)
+			d["y"] = clampf(target.y, 0.0, sim.size.y - a.size.y)
+		Drag.LEFT:
+			var x := clampf(snapped_p.x, 0.0, a.end.x - min_size)
+			d["x"] = x
+			d["w"] = a.end.x - x
+		Drag.RIGHT:
+			d["w"] = clampf(snapped_p.x, a.position.x + min_size, sim.size.x) - a.position.x
+		Drag.TOP:
+			var y := clampf(snapped_p.y, 0.0, a.end.y - min_size)
+			d["y"] = y
+			d["h"] = a.end.y - y
+		Drag.BOTTOM:
+			d["h"] = clampf(snapped_p.y, a.position.y + min_size, sim.size.y) - a.position.y
+
 
 func _hit_cannon(p: Vector2) -> int:
 	var best := -1
@@ -797,21 +935,8 @@ func _hit_cannon(p: Vector2) -> int:
 
 
 func _hit_gate(p: Vector2) -> int:
-	var r := sim.finish_rect()
-	if not r.grow(EDGE_GRAB).has_point(p):
-		return Drag.NONE
 	# Edges win over the interior so even a thin gate can be resized.
-	var dl := absf(p.x - r.position.x)
-	var dr := absf(p.x - r.end.x)
-	var dt := absf(p.y - r.position.y)
-	var db := absf(p.y - r.end.y)
-	var m := minf(minf(dl, dr), minf(dt, db))
-	if m <= EDGE_GRAB:
-		if m == dl: return Drag.LEFT
-		if m == dr: return Drag.RIGHT
-		if m == dt: return Drag.TOP
-		return Drag.BOTTOM
-	return Drag.MOVE
+	return _edge_mode(sim.finish_rect(), p)
 
 
 func _update_cursor(p: Vector2) -> void:
@@ -822,6 +947,8 @@ func _update_cursor(p: Vector2) -> void:
 		shape = Input.CURSOR_MOVE if _hit_handle(p) >= 0 else Input.CURSOR_CROSS
 	elif _hit_cannon(p) >= 0:
 		shape = Input.CURSOR_MOVE
+	elif _hit_wall(p)[0] >= 0:
+		shape = _cursor_for(_hit_wall(p)[1])
 	else:
 		shape = _cursor_for(_hit_gate(p))
 	Input.set_default_cursor_shape(shape)
@@ -877,6 +1004,16 @@ func _press(p: Vector2) -> void:
 			var c: Dictionary = level["cannons"][i]
 			drag_positions[i] = Vector2(float(c["x"]), float(c["y"]))
 		drag_offset = drag_positions[hit] - sim.cannon_states[hit]["pos"]
+		_update_cursor(p)
+		return
+	var wall_hit := _hit_wall(p)
+	if wall_hit[0] >= 0 and not modifier:
+		_select_wall(wall_hit[0])
+		dragging = true
+		drag_mode = wall_hit[1]
+		var w: Dictionary = level["walls"][selected_wall]
+		drag_anchor = Rect2(float(w["x"]), float(w["y"]), float(w["w"]), float(w["h"]))
+		drag_offset = drag_anchor.position - p
 		_update_cursor(p)
 		return
 	var gate := _hit_gate(p)
@@ -936,29 +1073,15 @@ func _drag_to(p: Vector2) -> void:
 			b["points"][handle_index] = [rel.x, rel.y]
 			_params_changed()
 		return
-	var snapped_p := p.snapped(Vector2(GRID, GRID))
 	if finish_selected:
-		var f: Dictionary = level["finish"]
-		var a := drag_anchor
-		match drag_mode:
-			Drag.MOVE:
-				var target := (p + drag_offset).snapped(Vector2(GRID, GRID))
-				f["x"] = clampf(target.x, 0.0, sim.size.x - a.size.x)
-				f["y"] = clampf(target.y, 0.0, sim.size.y - a.size.y)
-			Drag.LEFT:
-				var x := clampf(snapped_p.x, 0.0, a.end.x - MIN_GATE)
-				f["x"] = x
-				f["w"] = a.end.x - x
-			Drag.RIGHT:
-				f["w"] = clampf(snapped_p.x, a.position.x + MIN_GATE, sim.size.x) - a.position.x
-			Drag.TOP:
-				var y := clampf(snapped_p.y, 0.0, a.end.y - MIN_GATE)
-				f["y"] = y
-				f["h"] = a.end.y - y
-			Drag.BOTTOM:
-				f["h"] = clampf(snapped_p.y, a.position.y + MIN_GATE, sim.size.y) - a.position.y
+		_drag_rect(level["finish"], p, MIN_GATE)
 		if drag_mode != Drag.MOVE:
 			_rebuild_inspector()   # keep the width / height spin boxes in sync
+	elif selected_wall >= 0 and selected_wall < level.get("walls", []).size():
+		_drag_rect(level["walls"][selected_wall], p, MIN_WALL)
+		sim.reset()
+		if drag_mode != Drag.MOVE:
+			_rebuild_inspector()
 	elif not selection.is_empty() and pressed_cannon >= 0:
 		# Move the whole group by the grabbed cannon's snapped displacement.
 		var target := (p + drag_offset).snapped(Vector2(GRID, GRID))
@@ -1087,8 +1210,13 @@ func _size_changed() -> void:
 	f["h"] = clampf(float(f.get("h", 400.0)), MIN_GATE, sim.size.y)
 	f["x"] = clampf(float(f.get("x", 0.0)), 0.0, sim.size.x - float(f["w"]))
 	f["y"] = clampf(float(f.get("y", 0.0)), 0.0, sim.size.y - float(f["h"]))
+	for w in level.get("walls", []):
+		w["w"] = clampf(float(w["w"]), MIN_WALL, sim.size.x)
+		w["h"] = clampf(float(w["h"]), MIN_WALL, sim.size.y)
+		w["x"] = clampf(float(w["x"]), 0.0, sim.size.x - float(w["w"]))
+		w["y"] = clampf(float(w["y"]), 0.0, sim.size.y - float(w["h"]))
 	_mark_dirty()
 	view.rebuild()
 	_update_camera_limits()
 	camera.reset_view()
-	view.set_selection(selection, finish_selected)
+	view.set_selection(selection, finish_selected, selected_wall)

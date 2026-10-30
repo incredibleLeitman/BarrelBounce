@@ -287,6 +287,9 @@ func _physics_process(delta: float) -> void:
 			"jump":
 				view.player_node.kick()
 				Sfx.play(self, Sfx.pop(), -6.0)
+			"bounce":
+				view.player_node.kick()
+				Sfx.play(self, Sfx.pop(), -12.0)
 			"catch":
 				view.player_node.kick()
 			"die":

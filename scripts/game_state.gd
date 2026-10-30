@@ -150,6 +150,7 @@ func normalize_level(l: Dictionary) -> Dictionary:
 		l["start"] = 0
 	if not l.has("background") or not Backdrop.THEMES.has(str(l["background"])):
 		l["background"] = "space"
+	LevelCheck.normalize_walls(l)
 	Simulation.enforce_start_type(l)
 	return l
 

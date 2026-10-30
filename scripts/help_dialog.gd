@@ -44,6 +44,11 @@ static func show(parent: Control) -> VBoxContainer:
 	if not GameState.full_version():
 		body.add_child(UI.label("This is the demo: the full game adds Big Bertha, Pea Shooter, Blink, Hopper, Bubble and Hot Head cannons, walls, more levels, online leaderboards with ghosts and community levels.", 15, UI.ACCENT_2, true))
 
+	if GameState.full_version():
+		body.add_child(UI.spacer(10))
+		body.add_child(UI.label("Walls", 24))
+		_row(body, _wall_figure(), "Wall", "A solid block. The ball bounces off it at full speed, so walls can block a straight shot, bank a shot around a corner, or keep a moving cannon's path honest. Blink jumps straight through them.")
+
 	body.add_child(UI.spacer(10))
 	body.add_child(UI.label("Movement (combine as many as you like)", 24))
 	for key in Simulation.BEHAVIOR_ORDER:
@@ -82,6 +87,17 @@ static func _cannon_figure(type_key: String, behaviors: Array, with_hints: bool 
 	node.show_hints = with_hints
 	node.apply_state(Simulation.cannon_state_at(data, 0), false)
 	holder.add_child(node)
+	return box
+
+
+static func _wall_figure() -> Control:
+	var box := Control.new()
+	box.custom_minimum_size = FIGURE_SIZE
+	box.clip_contents = true
+	var node := WallsNode.new()
+	var rects: Array[Rect2] = [Rect2(20, 10, 70, 50)]
+	node.set_walls(rects, "space")
+	box.add_child(node)
 	return box
 
 

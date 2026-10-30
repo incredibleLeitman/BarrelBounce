@@ -9,6 +9,7 @@ var ghosts: Array = []
 var cannon_nodes: Array = []
 var player_node: PlayerNode
 var finish_node: FinishNode
+var walls_node: WallsNode
 var backdrop: Backdrop
 var show_hints := false
 ## Screen-space insets (left, top, right, bottom) to keep clear of UI. When set, the play
@@ -19,6 +20,8 @@ var fit_inset := Rect2()
 func _ready() -> void:
 	backdrop = Backdrop.new()
 	add_child(backdrop)
+	walls_node = WallsNode.new()
+	add_child(walls_node)
 	finish_node = FinishNode.new()
 	add_child(finish_node)
 	player_node = PlayerNode.new()
@@ -89,6 +92,7 @@ func refresh() -> void:
 		var occupied := sim.mode == Simulation.Mode.IN_CANNON and sim.cannon_index == i
 		cannon_nodes[i].apply_state(sim.cannon_states[i], occupied, sim.fuse_left(i))
 	finish_node.set_rect(sim.finish_rect())
+	walls_node.set_walls(Simulation.wall_rects(sim.level), str(sim.level.get("background", "space")))
 	player_node.update_from(sim)
 	for g in ghosts:
 		g["node"].update_from(g["sim"])
@@ -119,13 +123,15 @@ func clear_ghost_trails() -> void:
 		g["node"].clear_trail()
 
 
-func set_selection(indices: Array, finish_selected: bool) -> void:
+func set_selection(indices: Array, finish_selected: bool, wall: int = -1) -> void:
 	for i in cannon_nodes.size():
 		var on: bool = indices.has(i)
 		cannon_nodes[i].selected = on
 		cannon_nodes[i].z_index = 1 if on else 0   # selected patterns draw above the others
 		cannon_nodes[i].queue_redraw()
 	finish_node.selected = finish_selected
+	walls_node.selected = wall
+	walls_node.queue_redraw()
 
 
 ## Rubber-band selection rectangle in level coordinates; an empty rect hides it.

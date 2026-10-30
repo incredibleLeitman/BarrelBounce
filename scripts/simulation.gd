@@ -15,6 +15,7 @@ const TICK_RATE := 60
 const DT := 1.0 / TICK_RATE
 const GRAVITY := 1500.0
 const CATCH_RADIUS := 36.0           # distance at which a cannon sucks the player in
+const BALL_RADIUS := 15.0            # for bouncing off walls (matches the drawn ball)
 const COOLDOWN_TICKS := 10           # ticks before the cannon that just fired can re-catch
 const DOUBLE_JUMP_VEL := -650.0
 ## Default play area; a level can set its own "width" / "height".
@@ -94,6 +95,7 @@ var level: Dictionary
 var size: Vector2 = BASE_SIZE   # play area of this level
 var world: Rect2 = WORLD        # death bounds of this level
 var cannons: Array            # references the level's cannon dictionaries (shared, not copied)
+var walls: Array[Rect2] = []  # solid blocks the ball bounces off, from level["walls"]
 var cannon_states: Array = [] # per cannon: {"pos": Vector2, "angle": float (deg)} for the current tick
 
 var tick: int = 0
@@ -111,7 +113,7 @@ var cooldown: int = 0
 var cooldown_cannon: int = -1
 var finish_ticks: int = -1
 var launches: int = 0
-## Events produced by the last [method step]: "launch", "teleport", "jump", "catch", "finish", "die".
+## Events produced by the last [method step]: "launch", "teleport", "jump", "bounce", "catch", "finish", "die".
 var events: Array = []
 
 
@@ -368,6 +370,15 @@ func fuse_left(index: int) -> float:
 	return clampf(1.0 - float(ticks_in_cannon) / float(auto_ticks), 0.0, 1.0)
 
 
+## The level's walls as rectangles ({"x","y","w","h"} dictionaries in the level data).
+static func wall_rects(level_data: Dictionary) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for w in level_data.get("walls", []):
+		if typeof(w) == TYPE_DICTIONARY:
+			out.append(Rect2(float(w.get("x", 0.0)), float(w.get("y", 0.0)), maxf(1.0, float(w.get("w", 40.0))), maxf(1.0, float(w.get("h", 40.0)))))
+	return out
+
+
 func finish_rect() -> Rect2:
 	var f: Dictionary = level.get("finish", {"x": 1100.0, "y": 160.0, "w": 60.0, "h": 400.0})
 	return Rect2(float(f.get("x", 0.0)), float(f.get("y", 0.0)), float(f.get("w", 60.0)), float(f.get("h", 400.0)))
@@ -376,6 +387,7 @@ func finish_rect() -> Rect2:
 func reset() -> void:
 	size = level_size(level)
 	world = world_rect(level)
+	walls = wall_rects(level)
 	tick = 0
 	run_start_tick = -1
 	mode = Mode.IN_CANNON
@@ -452,6 +464,7 @@ func step(fire: bool) -> void:
 				events.append("jump")
 			vel.y += GRAVITY * gravity_scale * DT
 			pos += vel * DT
+			_bounce_off_walls()
 			if cooldown > 0:
 				cooldown -= 1
 			_check_catch()
@@ -481,6 +494,35 @@ func _launch() -> void:
 		teleport_from = pos
 		pos += dir * float(info["teleport"])
 		events.append("teleport")
+
+
+## Walls are solid: the ball is pushed out through the nearest face and that velocity
+## component flips, keeping its speed (a perfectly elastic bounce). One wall per tick is
+## enough at these speeds.
+func _bounce_off_walls() -> void:
+	for w in walls:
+		var r := w.grow(BALL_RADIUS)
+		if not r.has_point(pos):
+			continue
+		var dl := pos.x - r.position.x
+		var dr := r.end.x - pos.x
+		var dt := pos.y - r.position.y
+		var db := r.end.y - pos.y
+		var m := minf(minf(dl, dr), minf(dt, db))
+		if m == dl:
+			pos.x = r.position.x
+			vel.x = -absf(vel.x)
+		elif m == dr:
+			pos.x = r.end.x
+			vel.x = absf(vel.x)
+		elif m == dt:
+			pos.y = r.position.y
+			vel.y = -absf(vel.y)
+		else:
+			pos.y = r.end.y
+			vel.y = absf(vel.y)
+		events.append("bounce")
+		return
 
 
 func _check_catch() -> void:

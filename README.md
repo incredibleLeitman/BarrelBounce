@@ -103,6 +103,10 @@ Saved levels are JSON in `user://levels/<id>.json` (on Windows:
 }
 ```
 
+`walls` is an optional list of `{"x","y","w","h"}` rectangles: solid blocks the ball bounces off
+at full speed (drawn in a style that matches the background; Blink teleports through them).
+Levels without walls keep the revision hash they had before walls existed.
+
 `background` is one of `space`, `underwater`, `meadow`, `sunset`, `cave`, `battlefield` (all drawn
 procedurally in `scripts/view/backdrop.gd`; pick one under *Settings* in the editor).
 

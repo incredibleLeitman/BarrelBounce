@@ -19,6 +19,7 @@ func _ready() -> void:
 	await _test_ghost_and_fairness()
 	_test_online_offline()
 	_test_demo_edition()
+	_test_walls()
 	print("SMOKE TEST " + ("PASSED" if failures == 0 else "FAILED (%d)" % failures))
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -453,3 +454,35 @@ func _test_demo_edition() -> void:
 	check(GameState.level_from_code(blink_code).get("locked", false) == true, "a code with full-game cannons is reported as locked")
 	GameState.force_demo = false
 	check(GameState.builtin_levels().size() == all_count, "the full edition lists every level")
+
+
+func _test_walls() -> void:
+	print("walls: elastic bounce, revision hash")
+	var base := {"cannons": [{"x": 100.0, "y": 600.0, "angle": 0.0, "type": "normal", "behaviors": []}],
+		"finish": {"x": 1200.0, "y": 100.0, "w": 60.0, "h": 500.0}, "start": 0}
+	var plain := GameState.normalize_level(base.duplicate(true))
+	var with_empty := base.duplicate(true)
+	with_empty["walls"] = []
+	check(GameState.level_hash(GameState.normalize_level(with_empty)) == GameState.level_hash(plain), "an empty walls list keeps the revision")
+	var walled := base.duplicate(true)
+	walled["walls"] = [{"x": 300.0, "y": 400.0, "w": 40.0, "h": 320.0}]
+	walled = GameState.normalize_level(walled)
+	check(GameState.level_hash(walled) != GameState.level_hash(plain), "a wall changes the revision")
+	var sim := Simulation.new(walled.duplicate(true))
+	sim.step(true)
+	var speed := sim.vel.length()
+	var bounced := false
+	for i in 60:
+		sim.step(false)
+		if sim.events.has("bounce"):
+			bounced = true
+			break
+	check(bounced, "the ball hits the wall")
+	check(sim.vel.x < 0.0, "and flies back the way it came")
+	check(absf(sim.vel.length() - speed) < speed * 0.25, "at (nearly) the same speed, gravity aside")
+	check(sim.pos.x <= 300.0 - Simulation.BALL_RADIUS + 0.01, "and is kept outside the wall")
+	var open_sim := Simulation.new(plain.duplicate(true))
+	open_sim.step(true)
+	for i in 20:
+		open_sim.step(false)
+	check(open_sim.pos.x > 350.0 and open_sim.mode == Simulation.Mode.FLYING, "without the wall it flies on")
