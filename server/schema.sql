@@ -44,3 +44,19 @@ CREATE TABLE IF NOT EXISTS stars (
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (level_id, player_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Anonymous usage events (see api.php track / stats). No player id, name or IP.
+CREATE TABLE IF NOT EXISTS events (
+  id            INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  session       CHAR(16)     NOT NULL,               -- random per game start
+  build         VARCHAR(8)   NOT NULL DEFAULT '',    -- demo / full
+  platform      VARCHAR(16)  NOT NULL DEFAULT '',    -- Web, Android, Windows, ...
+  version       VARCHAR(16)  NOT NULL DEFAULT '',
+  name          VARCHAR(24)  NOT NULL,               -- session, level_start, level_finish, level_fail, ...
+  level_id      VARCHAR(64)  NOT NULL DEFAULT '',
+  value         INT          NOT NULL DEFAULT 0,     -- finish time in ticks, etc.
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY by_name (name, created_at),
+  KEY by_level (level_id, name),
+  KEY by_session (session)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -56,6 +56,7 @@ var save_button: Button
 
 
 func _ready() -> void:
+	Online.track("editor_open")
 	level = GameState.editor_level
 	if level.is_empty():
 		level = GameState.new_level()

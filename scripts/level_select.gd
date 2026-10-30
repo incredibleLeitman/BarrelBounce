@@ -457,6 +457,7 @@ func _publish(level: Dictionary) -> void:
 		if not is_instance_valid(root):
 			return
 		if ok:
+			Online.track("publish", str(level["id"]))
 			level["online_id"] = str(level["id"])
 			GameState.save_user_level(level)
 			UI.toast(root, "Published. It appears under Community once verified (up to 30 minutes).", UI.GOOD)

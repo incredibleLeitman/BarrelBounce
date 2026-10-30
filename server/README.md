@@ -67,6 +67,13 @@ All actions: `api.php?action=NAME`. POST bodies are JSON. Responses are JSON wit
 
 Everything is CORS-enabled so the web build on GitHub Pages can call it.
 
+## Usage statistics
+
+`track` stores anonymous events (session id, edition, platform, version, event name, level id,
+value) in the `events` table; `stats` (admin key) returns sessions by edition and platform and
+a per-level funnel (started, finished, fails, best time), optionally for the last `days` days.
+The verify workflow prints both. `PRIVACY.md` is the text for the privacy policy page.
+
 ## Abuse notes
 
 There is no login: a player is identified by the random id in their profile, which is also

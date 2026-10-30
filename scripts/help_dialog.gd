@@ -19,6 +19,7 @@ const BEHAVIOR_FIGURES := {
 	"orbit": [{"type": "orbit", "radius": 60.0, "period": 3.0}],
 	"path": [{"type": "path", "points": [[70.0, -50.0], [140.0, -20.0], [110.0, 50.0]], "period": 4.0, "smooth": true, "closed": true}],
 }
+const PRIVACY_URL := "https://ctrlaltpaw.com/datenschutz/"
 const FIGURE_SIZE := Vector2(110, 70)
 const FIGURE_SCALE := 0.5
 const FIGURE_BASE := Vector2(68, 70)   # level units inside the figure (ring radius 62 must fit on the left)
@@ -54,6 +55,16 @@ static func show(parent: Control) -> VBoxContainer:
 		"The block runs all the time and its movement is added to the other blocks. Two moves in opposite directions cancel each other out.")
 	_row(body, _icon_figure("seq"), "Step",
 		"Numbered blocks play one after another, each for its duration, each starting where the previous step ended. The sequence plays back and forth or loops. \"Move left, then move right\" goes there and back. Click the icon on a block in the editor to switch.")
+
+	body.add_child(UI.spacer(10))
+	body.add_child(UI.label("Online and privacy", 24))
+	var privacy := "The game sends anonymous usage statistics to our server: a random id per game start, the edition and platform, and which levels were started, finished or failed. No name, no account, no IP address is stored."
+	if Online.enabled():
+		privacy += " Online play adds the random player id from your profile, the name and colour you chose, your run's tap timings for verification, and the levels you publish or star. The GitHub Actions verifier replays runs on GitHub's servers."
+	body.add_child(UI.label(privacy, 15, UI.MUTED, true))
+	var link := UI.small_button("  Privacy policy  ")
+	link.pressed.connect(func(): OS.shell_open(PRIVACY_URL))
+	body.add_child(link)
 	return body
 
 

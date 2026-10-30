@@ -14,6 +14,8 @@
 //   GET  my_levels     player_id                        status of the player's published levels
 //   POST unpublish     {level_id, player_id}            removes a level (also cancels a pending one)
 //   POST star          {level_id, player_id, on}        marks / unmarks a favourite
+//   POST track         {session, build, platform, version, events:[{name, level_id, value}]}  anonymous usage events
+//   GET  stats         key [, days]                     the funnel the events add up to (admin)
 //   GET  pending       key                              rows the verifier must replay
 //   GET  all_runs      key                              every run with status (admin overview)
 //   POST resolve       {key, runs:[{id,status,reason}], levels:[{id,status,reason}]}
@@ -73,6 +75,8 @@ switch ($action) {
     case 'star':          star($pdo, $body); break;
     case 'pending':       pending($pdo, $config); break;
     case 'all_runs':      all_runs($pdo, $config); break;
+    case 'track':         track($pdo, $config, $body); break;
+    case 'stats':         stats($pdo, $config); break;
     case 'resolve':       resolve($pdo, $config, $body); break;
     default:              fail('Unknown action.', 404);
 }
@@ -347,6 +351,62 @@ function star(PDO $pdo, array $b): void {
     $st = $pdo->prepare("SELECT COUNT(*) FROM stars WHERE level_id = ?");
     $st->execute([$id]);
     ok(['starred' => $on, 'stars' => (int)$st->fetchColumn()]);
+}
+
+// Anonymous usage events: a random per-start session id, the edition, the platform and
+// what happened (level started / finished / failed...). No player id, name or IP is stored.
+function track(PDO $pdo, array $config, array $b): void {
+    $session = str_param($b['session'] ?? '', 16);
+    $build = str_param($b['build'] ?? '', 8);
+    $platform = str_param($b['platform'] ?? '', 16);
+    $version = str_param($b['version'] ?? '', 16);
+    $events = $b['events'] ?? null;
+    if (!preg_match('/^[0-9a-f]{16}$/', $session) || !is_array($events) || count($events) === 0) {
+        fail('session and events are required.');
+    }
+    if (count($events) > 50) fail('Too many events.');
+    $allowed = ['session', 'level_start', 'level_finish', 'level_fail', 'level_quit', 'editor_open', 'publish'];
+    $st = $pdo->prepare("INSERT INTO events (session, build, platform, version, name, level_id, value) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $n = 0;
+    foreach ($events as $e) {
+        if (!is_array($e)) continue;
+        $name = str_param($e['name'] ?? '', 24);
+        if (!in_array($name, $allowed, true)) continue;
+        $st->execute([$session, $build, $platform, $version, $name, str_param($e['level_id'] ?? '', 64), (int)($e['value'] ?? 0)]);
+        $n++;
+    }
+    ok(['stored' => $n]);
+}
+
+// Admin: what the events add up to. Sessions by edition and platform, and per level how
+// many sessions started it, finished it, and how often it was failed. `days` limits the window.
+function stats(PDO $pdo, array $config): void {
+    require_admin($config, $_GET['key'] ?? '');
+    $days = max(0, (int)($_GET['days'] ?? 0));
+    $where = $days > 0 ? "WHERE created_at >= DATE_SUB(NOW(), INTERVAL $days DAY)" : "";
+    $sessions = [];
+    foreach ($pdo->query("SELECT build, platform, COUNT(DISTINCT session) AS sessions FROM events $where GROUP BY build, platform ORDER BY sessions DESC") as $r) {
+        $r['sessions'] = (int)$r['sessions'];
+        $sessions[] = $r;
+    }
+    $levels = [];
+    $sql = "SELECT e.level_id, COALESCE(l.name, e.level_id) AS name,
+                   COUNT(DISTINCT CASE WHEN e.name = 'level_start' THEN e.session END) AS started,
+                   COUNT(DISTINCT CASE WHEN e.name = 'level_finish' THEN e.session END) AS finished,
+                   SUM(e.name = 'level_fail') AS fails,
+                   MIN(CASE WHEN e.name = 'level_finish' THEN e.value END) AS best_ticks
+            FROM events e LEFT JOIN levels l ON l.id = e.level_id
+            " . ($where === "" ? "WHERE" : "$where AND") . " e.level_id <> ''
+            GROUP BY e.level_id, l.name ORDER BY started DESC, e.level_id";
+    foreach ($pdo->query($sql) as $r) {
+        $r['started'] = (int)$r['started'];
+        $r['finished'] = (int)$r['finished'];
+        $r['fails'] = (int)$r['fails'];
+        $r['best_ticks'] = $r['best_ticks'] === null ? null : (int)$r['best_ticks'];
+        $levels[] = $r;
+    }
+    $total = (int)$pdo->query("SELECT COUNT(DISTINCT session) FROM events $where")->fetchColumn();
+    ok(['days' => $days, 'sessions_total' => $total, 'sessions' => $sessions, 'levels' => $levels]);
 }
 
 // Admin: every run with its status, newest first (the workflow prints it; handy to see the

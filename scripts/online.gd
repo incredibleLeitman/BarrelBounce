@@ -11,6 +11,46 @@ const TIMEOUT := 12.0
 ## Tests set this so a headless run never talks to the real server.
 var disabled_for_tests := false
 
+## Anonymous usage events (every edition, see README "Usage statistics"): a random id per
+## game start, the edition, the platform and what happened. Batched and sent a moment later.
+var session_id := ""
+var _queue: Array = []
+var _flush_timer: Timer
+
+
+func _ready() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	session_id = "%08x%08x" % [rng.randi(), rng.randi()]
+	_flush_timer = Timer.new()
+	_flush_timer.one_shot = true
+	_flush_timer.wait_time = 1.5
+	_flush_timer.timeout.connect(_flush)
+	add_child(_flush_timer)
+
+
+## Records one event; [param value] is the finish time in ticks for level_finish.
+func track(event: String, level_id: String = "", value: int = 0) -> void:
+	if API_URL == "" or disabled_for_tests:
+		return
+	_queue.append({"name": event, "level_id": level_id, "value": value})
+	if _queue.size() >= 20:
+		_flush()
+	elif _flush_timer.is_stopped():
+		_flush_timer.start()
+
+
+func _flush() -> void:
+	if _queue.is_empty():
+		return
+	var batch := _queue.duplicate()
+	_queue.clear()
+	_call("track", HTTPClient.METHOD_POST, {
+		"session": session_id, "build": "full" if GameState.full_version() else "demo",
+		"platform": OS.get_name(), "version": str(ProjectSettings.get_setting("application/config/version", "dev")),
+		"events": batch,
+	}, Callable())
+
 
 ## Leaderboards and community levels: the full online edition only (feature tag "online",
 ## see GameState.full_version), never in tests.

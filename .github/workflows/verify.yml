@@ -94,6 +94,30 @@ jobs:
                   print('  %-24s %-16s %6.2f s  %-9s %s  %s' % (r['level_name'][:24], r['player_name'][:16], r['ticks'] / 60, r['status'], r['reason'], r['created_at']))
           "
 
+      - name: Usage statistics (admin)
+        if: steps.cfg.outputs.configured == 'true'
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+        run: |
+          set -e
+          for days in 7 0; do
+            curl -sS -L -G "$API_URL" --data-urlencode "action=stats" --data-urlencode "days=$days" --data-urlencode "key=$ADMIN_KEY" -o stats.json
+            python3 -c "
+          import json
+          d = json.load(open('stats.json'))
+          if not d.get('ok'):
+              print('stats not available:', d.get('error')); raise SystemExit
+          print('=== %s: %d session(s)' % ('last %d days' % d['days'] if d['days'] else 'all time', d['sessions_total']))
+          for s in d['sessions']:
+              print('  %-6s %-10s %d session(s)' % (s['build'], s['platform'], s['sessions']))
+          print('  %-28s %8s %8s %6s %8s' % ('level', 'started', 'finished', 'fails', 'best'))
+          for l in d['levels']:
+              best = '%.2f s' % (l['best_ticks'] / 60) if l['best_ticks'] is not None else '-'
+              print('  %-28s %8d %8d %6d %8s' % (l['name'][:28], l['started'], l['finished'], l['fails'], best))
+          "
+          done
+
       - name: Cache Godot
         if: steps.cfg.outputs.configured == 'true' && steps.fetch.outputs.count != '0'
         id: cache

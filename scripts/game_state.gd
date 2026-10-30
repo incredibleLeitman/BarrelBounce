@@ -28,6 +28,7 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(USER_DIR)
 	_load_scores()
 	_load_profile()
+	Online.track.call_deferred("session")
 	TranslationServer.set_locale(language())
 
 
@@ -81,6 +82,15 @@ func builtin_levels() -> Array:
 		if level_is_available(l):
 			out.append(l.duplicate(true))
 	return out
+
+
+## The built-in level after [param level_id] in this edition, or {} when it was the last one.
+func builtin_next(level_id: String) -> Dictionary:
+	var levels := builtin_levels()
+	for i in levels.size() - 1:
+		if str(levels[i].get("id", "")) == level_id:
+			return levels[i + 1]
+	return {}
 
 
 ## Built-in levels the demo hides (0 in the full game).

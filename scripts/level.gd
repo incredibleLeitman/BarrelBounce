@@ -38,6 +38,7 @@ func _ready() -> void:
 	if level.is_empty():
 		level = GameState.builtin_levels()[0]
 	rev = GameState.level_hash(level)
+	Online.track("level_start", str(level.get("id", "")))
 	sim = Simulation.new(level)
 	view = LevelView.new()
 	add_child(view)
@@ -300,6 +301,7 @@ func _process(_delta: float) -> void:
 
 
 func _on_die() -> void:
+	Online.track("level_fail", str(level.get("id", "")), sim.launches)
 	view.player_node.puff()
 	death_timer = DEATH_PAUSE
 	Sfx.play(self, Sfx.buzzer(), -4.0)
@@ -332,6 +334,7 @@ func _on_finish() -> void:
 	var ticks := sim.finish_ticks
 	var id := str(level.get("id", ""))
 	var new_best := GameState.record_time(id, rev, ticks, taps)
+	Online.track("level_finish", id, ticks)
 	win_time.text = Simulation.format_ticks(ticks)
 	win_best.text = tr("New best time! Your ghost will race you next time.") if new_best else tr("best %s") % Simulation.format_ticks(GameState.best_ticks(id, rev))
 	var creator := GameState.creator_proof(level)
@@ -341,8 +344,7 @@ func _on_finish() -> void:
 		_load_ghost()
 	_update_best()
 	_online_after_finish(new_best, ticks)
-	var idx := GameState.builtin_index(id)
-	next_button.visible = idx >= 0 and idx + 1 < BuiltinLevels.LEVELS.size()
+	next_button.visible = not GameState.builtin_next(id).is_empty()
 	win_panel.visible = true
 	win_panel.scale = Vector2(0.6, 0.6)
 	win_panel.pivot_offset = win_panel.size / 2.0
@@ -418,10 +420,9 @@ func _online_after_finish(new_best: bool, ticks: int) -> void:
 
 
 func _next_level() -> void:
-	var idx := GameState.builtin_index(str(level.get("id", "")))
-	var levels := GameState.builtin_levels()
-	if idx >= 0 and idx + 1 < levels.size():
-		GameState.play_level(levels[idx + 1])
+	var next := GameState.builtin_next(str(level.get("id", "")))
+	if not next.is_empty():
+		GameState.play_level(next)
 
 
 func _on_back() -> void:

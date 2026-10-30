@@ -137,6 +137,16 @@ community list shows your own levels first, then starred ones, then the newest. 
 identified by their random id and authors by their random player id, so equal names never
 collide.
 
+### Usage statistics
+
+Every edition sends anonymous usage events to the API (`track`): a random id per game start,
+the edition (demo / full), the platform, the game version, and which level was started,
+finished (with the time) or failed. No player id, name or IP address is stored with them,
+so they need no consent, but they are listed in the game's help and in the privacy policy
+(`server/PRIVACY.md` has the text). `stats` sums them up into a funnel per level; the
+*Verify online runs* workflow prints it on every run (Actions → Verify online runs → Run
+workflow → step *Usage statistics*), for the last 7 days and all time.
+
 ### Languages
 
 All visible text goes through Godot's translation system with English as the source
